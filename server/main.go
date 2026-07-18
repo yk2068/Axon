@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/gorilla/websocket"
 	"io"
 	"io/fs"
 	"math"
@@ -19,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 //go:embed web/*
@@ -159,11 +160,35 @@ type ClientMessage struct {
 	Key       string  `json:"key"`
 	Modifier  string  `json:"modifier"`
 	Timestamp int64   `json:"timestamp"`
+	Token     string  `json:"token,omitempty"`
 }
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		localIP := getLocalIP()
+		allowed := []string{
+			fmt.Sprintf("http://%s:%d", localIP, port),
+			fmt.Sprintf("http://127.0.0.1:%d", port),
+			fmt.Sprintf("http://localhost:%d", port),
+		}
+		for _, a := range allowed {
+			if origin == a {
+				return true
+			}
+		}
+		// Allow connections from native apps (non-browser origins)
+		if !strings.HasPrefix(origin, "http") {
+			return true
+		}
+		fmt.Printf("[SECURITY] Rejected WebSocket from origin: %s\n", origin)
+		return false
+	},
 }
 
 func generateToken() string {
@@ -256,34 +281,12 @@ func handleMessages(conn *websocket.Conn) {
 		if err != nil {
 			continue
 		}
-		switch msg.Type {
-		case "pong":
+		if msg.Type == "pong" {
 			rtt := time.Now().UnixMilli() - msg.Timestamp
 			fmt.Printf("[LATENCY] RTT Latency: %d ms\n", rtt)
-		case "move":
-			simulator.MoveMouse(msg.Dx, msg.Dy)
-		case "click":
-			simulator.Click(msg.Button)
-		case "mousedown":
-			simulator.MouseDown(msg.Button)
-		case "mouseup":
-			simulator.MouseUp(msg.Button)
-		case "scroll":
-			dir := "down"
-			if msg.Dy > 0 {
-				dir = "up"
-			}
-			simulator.Scroll(dir)
-		case "type":
-			fmt.Printf("[KEYBOARD] Typing text: %q\n", msg.Text)
-			simulator.Type(msg.Text)
-		case "key":
-			fmt.Printf("[KEYBOARD] Pressing special key: %q\n", msg.Key)
-			simulator.Key(msg.Key)
-		case "keycombo":
-			fmt.Printf("[KEYBOARD] Pressing combo: %s+%s\n", msg.Modifier, msg.Key)
-			simulator.KeyCombo(msg.Modifier, msg.Key)
+			continue
 		}
+		dispatchCommand(msg)
 	}
 }
 func startUDPServer(conn *net.UDPConn) {
@@ -411,12 +414,12 @@ func main() {
 	setupADBReverse()
 	ip := getLocalIP()
 	if ip == "" {
-		fmt.Println("❌ Error: Could not retrieve local IP address")
+		fmt.Println("Error: Could not retrieve local IP address")
 		os.Exit(1)
 	}
 	tcpListener, actualPort, err := tryPortWithFallback(port)
 	if err != nil {
-		fmt.Printf("❌ Error: Failed to bind to any port: %v\n", err)
+		fmt.Printf(" Error: Failed to bind to any port: %v\n", err)
 		os.Exit(1)
 	}
 	defer tcpListener.Close()
@@ -427,7 +430,7 @@ func main() {
 
 	udpConn, actualUdpPort, err := tryUDPPortWithFallback(udpPort)
 	if err != nil {
-		fmt.Printf("❌ Error: Failed to bind UDP port: %v\n", err)
+		fmt.Printf(" Error: Failed to bind UDP port: %v\n", err)
 		os.Exit(1)
 	}
 	if actualUdpPort != udpPort {
@@ -436,7 +439,7 @@ func main() {
 	}
 	activeToken = generateToken()
 	addr := fmt.Sprintf("%s:%d", ip, port)
-	url := fmt.Sprintf("http://%s/?token=%s", addr, activeToken)
+	url := fmt.Sprintf("http://%s/?token=%s&udp=%d", addr, activeToken, udpPort)
 	lineDelay := 55 * time.Millisecond
 	printLine(colorizeRainbow("    ___  _  ______  _  __", 0.4), lineDelay)
 	printLine(colorizeRainbow("   /   || |/ / __ \\/ |/ /", 0.4), lineDelay)
@@ -445,23 +448,21 @@ func main() {
 	printLine(colorizeRainbow("/_/  |_/_/|_\\____/_/|_/   ", 0.4), lineDelay)
 	printLine(colorizeRainbow("    [ HIGH-SPEED INPUT BRIDGE ]", 0.6), lineDelay)
 	if !*noLogo {
-		printLine("", 0)
-		printLine(colorizeRainbow("                    \u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u28c0\u2843\u2843\u2843\u2841\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2843\u2843\u2843\u2843\u2841\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u28c0\u2843\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800", 0.8), lineDelay)
-		printLine(colorizeRainbow("                    \u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u28e0\u28bf\u2899\u2888\u2888\u2888\u28f3\u28b7\u2836\u28be\u289b\u289b\u289b\u2836\u28be\u2899\u2888\u2888\u2888\u28f3\u28c7\u2804\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u28a0\u28c4\u28bf\u28c3\u28b7\u2800\u28e4\u28c6\u28a6\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800", 0.8), lineDelay)
-		printLine(colorizeRainbow("                    \u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2820\u28bf\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2808\u28bf\u2800\u2800\u2800\u2800\u2800\u2800\u28e4\u28bf\u2803\u28bc\u28bf\u2800\u28be\u28bf\u28bc\u2807\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u28bf\u28bf\u2807\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800", 0.8), lineDelay)
-		printLine(colorizeRainbow("                    \u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u28bf\u28c7\u2804\u2800\u28e4\u28e4\u28e4\u28e4\u2800\u2800\u2800\u2800\u2820\u28c6\u28bf\u28bf\u28bf\u28bf\u28c4\u2808\u28fb\u2806\u2820\u2880\u2807\u28e4\u28bf\u28bf\u2800\u2800\u28f9\u28bf\u2808\u28bf\u28cf\u2800\u28bf\u28cf\u28fb\u2808\u28ff\u28fb\u28bf\u28bf\u2800\u2820\u28e4\u28f9\u28bf\u28c3\u28f1\u28f3\u2800\u28e4\u28e4\u28e4\u28e4\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800", 0.8), lineDelay)
-		printLine(colorizeRainbow("                    \u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u28fb\u2807\u2800\u2810\u28df\u28c9\u2809\u28d9\u2813\u2800\u2820\u2800\u2818\u28bf\u28bf\u28bf\u28bf\u28bc\u2803\u2800\u2818\u28d7\u28ff\u28f7\u28be\u28bf\u280b\u2800\u2800\u2800\u2818\u28ff\u2806\u289b\u28ff\u289f\u289f\u28b7\u289e\u289b\u28ff\u2801\u289f\u28ff\u289b\u28ff\u289e\u289f\u289b\u28ff\u2809\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800", 0.8), lineDelay)
-		printLine(colorizeRainbow("                    \u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2808\u28f7\u28e4\u2818\u289b\u289b\u2800\u2800\u28b8\u28f7\u28ff\u28fb\u28be\u28cf\u2808\u2808\u28bd\u28ff\u28df\u28a0\u28bf\u2801\u2800\u2808\u2808\u2800\u2800\u2800\u28e6\u2806\u2810\u28e6\u2806\u2806\u2810\u2800\u28e6\u28a6\u28a0\u28e4\u2820\u28e6\u2806\u2820\u28e6\u28c4\u28e6\u2806\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800", 0.8), lineDelay)
-		printLine(colorizeRainbow("                    \u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2808\u289b\u28b7\u28f6\u28f6\u28f6\u2806\u2809\u2813\u2809\u280b\u2810\u28f6\u28f6\u28f6\u289e\u289b\u2808\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u289b\u280b\u2800\u289b\u2800\u2809\u280b\u2800\u289b\u280b\u2808\u2803\u2808\u289b\u2801\u2808\u289b\u2801\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800\u2800", 0.8), lineDelay)
-		printLine("", 0)
+		printLine(colorizeRainbow("               ___    __    ____ _  __ ____ ___ ", 0.8), lineDelay)
+		printLine(colorizeRainbow("              /   |  / /   / __/ / / //  _//   |", 0.8), lineDelay)
+		printLine(colorizeRainbow("             / /| | / /   / /_  /  / // / / /| |", 0.8), lineDelay)
+		printLine(colorizeRainbow("            / ___ |/ /___/ __/ / /  // / / ___ |", 0.8), lineDelay)
+		printLine(colorizeRainbow("           /_/  |_/_____/___/ /_/ /_/___/_/  |_|", 0.8), lineDelay)
+		printLine(colorizeRainbow("                   S T U D I O S", 0.8), lineDelay)
 	}
+	printLine("", 0)
 
 	printLine(colorizeRainbow("    ────────────────────────────────────────────────────", 0.5), lineDelay)
 
 	time.Sleep(30 * time.Millisecond)
-	printLine(colorizeRainbow(fmt.Sprintf("    🌍 ADDRESS : %s", ip), 0.5), lineDelay)
-	printLine(colorizeRainbow(fmt.Sprintf("    🔌 PORTS   : %d (TCP/WS)  ·  %d (UDP)", port, udpPort), 0.5), lineDelay)
-	printLine(colorizeRainbow("    🔐 SEC TOKEN : "+activeToken, 0.5), lineDelay)
+	printLine(colorizeRainbow(fmt.Sprintf("     ADDRESS : %s", ip), 0.5), lineDelay)
+	printLine(colorizeRainbow(fmt.Sprintf("     PORTS   : %d (TCP/WS)  ·  %d (UDP)", port, udpPort), 0.5), lineDelay)
+	printLine(colorizeRainbow("     SEC TOKEN : "+activeToken, 0.5), lineDelay)
 	time.Sleep(30 * time.Millisecond)
 	printLine(colorizeRainbow("    ────────────────────────────────────────────────────", 0.5), lineDelay)
 	time.Sleep(30 * time.Millisecond)
@@ -472,7 +473,7 @@ func main() {
 	printLine(colorizeRainbow("    ────────────────────────────────────────────────────", 0.5), lineDelay)
 	printLine("", 0)
 	time.Sleep(60 * time.Millisecond)
-	fmt.Println(colorizeRainbow("    📱 Scan the QR with the AXON app:", 0.5))
+	fmt.Println(colorizeRainbow("     Scan the QR with the AXON app:", 0.5))
 	printLine("", 0)
 	printTerminalQRCode(url)
 	fmt.Printf("\n")
@@ -482,16 +483,16 @@ func main() {
 	go startUDPServer(udpConn)
 	subFS, err := fs.Sub(webFS, "web")
 	if err != nil {
-		fmt.Println("❌ Error loading static web files:", err)
+		fmt.Println(" Error loading static web files:", err)
 		os.Exit(1)
 	}
 	http.Handle("/", http.FileServer(http.FS(subFS)))
 	http.HandleFunc("/ws", handleWebSocket)
 	server := &http.Server{}
-	fmt.Printf("[SERVER] ✅ Listening on port %d...\n", port)
+	fmt.Printf("[SERVER]  Listening on port %d...\n", port)
 	err = server.Serve(tcpListener)
 	if err != nil {
-		fmt.Printf("❌ Error starting the server: %v\n", err)
+		fmt.Printf(" Error starting the server: %v\n", err)
 		os.Exit(1)
 	}
 }
