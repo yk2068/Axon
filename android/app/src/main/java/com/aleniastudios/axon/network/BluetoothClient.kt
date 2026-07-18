@@ -1,4 +1,4 @@
-package com.example.axon.network
+package com.aleniastudios.axon.network
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
@@ -19,7 +19,7 @@ class BluetoothClient(private val listener: ConnectionListener) : InputClient {
     }
     override fun getServerIp(): String = connectedDeviceAddress
     @SuppressLint("MissingPermission")
-    fun connect(deviceAddress: String) {
+    fun connect(deviceAddress: String, token: String = "") {
         connectedDeviceAddress = deviceAddress
         Thread {
             try {
@@ -41,6 +41,12 @@ class BluetoothClient(private val listener: ConnectionListener) : InputClient {
                     }
                 }
                 outputStream = socket?.outputStream
+                // Authenticate before sending any other commands
+                if (token.isNotEmpty()) {
+                    val escaped = token.replace("\\", "\\\\").replace("\"", "\\\"")
+                    outputStream?.write("{\"type\":\"auth\",\"token\":\"$escaped\"}\n".toByteArray())
+                    outputStream?.flush()
+                }
                 listener.onConnected()
             } catch (e: Exception) {
                 listener.onError("Bluetooth Error: ${e.message}")

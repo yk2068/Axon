@@ -1,4 +1,4 @@
-package com.example.axon.network
+package com.aleniastudios.axon.network
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel

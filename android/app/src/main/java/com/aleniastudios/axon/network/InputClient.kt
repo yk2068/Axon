@@ -1,4 +1,4 @@
-package com.example.axon.network
+package com.aleniastudios.axon.network
 interface InputClient {
     fun sendMove(dx: Double, dy: Double)
     fun sendScroll(dy: Double)

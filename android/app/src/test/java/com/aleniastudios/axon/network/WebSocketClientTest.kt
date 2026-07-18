@@ -1,4 +1,4 @@
-package com.example.axon.network
+package com.aleniastudios.axon.network
 import org.junit.Assert.assertEquals
 import org.junit.Test
 class WebSocketClientTest {

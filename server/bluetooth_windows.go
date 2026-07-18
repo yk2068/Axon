@@ -62,9 +62,20 @@ func handleBluetoothConnection(conn net.Conn) {
 	}()
 
 	scanner := bufio.NewScanner(conn)
-	// Increase scanner buffer size in case of large messages
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
+
+	// First message must be an auth token
+	if !scanner.Scan() {
+		fmt.Println("[BT] Client disconnected before authentication")
+		return
+	}
+	var authMsg ClientMessage
+	if err := json.Unmarshal(scanner.Bytes(), &authMsg); err != nil || authMsg.Type != "auth" || authMsg.Token != activeToken {
+		fmt.Println("[SECURITY] Bluetooth client failed authentication")
+		return
+	}
+	fmt.Println("[BT] Client authenticated successfully")
 
 	for scanner.Scan() {
 		processBluetoothData(scanner.Bytes())
@@ -75,35 +86,9 @@ func handleBluetoothConnection(conn net.Conn) {
 	}
 }
 func processBluetoothData(data []byte) {
-	text := string(data)
 	var msg ClientMessage
-	err := json.Unmarshal([]byte(text), &msg)
-	if err != nil {
+	if err := json.Unmarshal(data, &msg); err != nil {
 		return
 	}
-	switch msg.Type {
-	case "move":
-		simulator.MoveMouse(msg.Dx, msg.Dy)
-	case "click":
-		simulator.Click(msg.Button)
-	case "mousedown":
-		simulator.MouseDown(msg.Button)
-	case "mouseup":
-		simulator.MouseUp(msg.Button)
-	case "scroll":
-		dir := "down"
-		if msg.Dy > 0 {
-			dir = "up"
-		}
-		simulator.Scroll(dir)
-	case "type":
-		fmt.Printf("[BT KEYBOARD] Typing text: %q\n", msg.Text)
-		simulator.Type(msg.Text)
-	case "key":
-		fmt.Printf("[BT KEYBOARD] Pressing special key: %q\n", msg.Key)
-		simulator.Key(msg.Key)
-	case "keycombo":
-		fmt.Printf("[BT KEYBOARD] Pressing combo: %s+%s\n", msg.Modifier, msg.Key)
-		simulator.KeyCombo(msg.Modifier, msg.Key)
-	}
+	dispatchCommand(msg)
 }

@@ -1,4 +1,4 @@
-package com.example.axon.ui
+package com.aleniastudios.axon.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.LinearEasing
@@ -57,19 +57,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.axon.R
+import com.aleniastudios.axon.R
 import kotlin.math.cos
 import kotlin.math.sin
-private val BgGradStart  = Color(0xFF0F172A)
-private val BgGradEnd    = Color(0xFF020617)
-private val AccentGlow   = Color(0xFF1E3A8A)
-private val CardColor    = Color(0xFF0F172A)
-private val CardInner    = Color(0xFF1E293B)
-private val BlueAccent   = Color(0xFF3B82F6)
-private val VioletAccent = Color(0xFF8B5CF6)
-private val TextPrimary  = Color(0xFFF9FAFB)
-private val TextSecond   = Color(0xFF94A3B8)
-private val BorderColor  = Color(0xFF334155)
+import com.aleniastudios.axon.theme.AxonColors
 private val px = floatArrayOf(0.15f, 0.85f, 0.25f, 0.75f, 0.5f, 0.35f, 0.65f, 0.2f, 0.8f, 0.9f)
 private val py = floatArrayOf(0.2f, 0.15f, 0.75f, 0.8f, 0.65f, 0.45f, 0.35f, 0.55f, 0.6f, 0.4f)
 private val pr = floatArrayOf(4f, 6f, 5f, 8f, 5f, 7f, 4f, 6f, 5f, 7f)
@@ -122,13 +113,13 @@ fun StartScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(BgGradStart, BgGradEnd)
+                    colors = listOf(AxonColors.BgGradStart, AxonColors.BgGradEnd)
                 )
             )
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawCircle(
-                color = AccentGlow.copy(alpha = 0.35f),
+                color = AxonColors.AccentGlow.copy(alpha = 0.35f),
                 radius = size.minDimension * 0.7f,
                 center = Offset(size.width / 2f, size.height * 0.3f)
             )
@@ -139,7 +130,7 @@ fun StartScreen(
                 val x = size.width * px[i] + dx
                 val y = size.height * py[i] + dy
                 drawCircle(
-                    color = BlueAccent.copy(alpha = 0.12f),
+                    color = AxonColors.BlueAccent.copy(alpha = 0.12f),
                     radius = pr[i].dp.toPx(),
                     center = Offset(x, y)
                 )
@@ -165,7 +156,7 @@ fun StartScreen(
             ) {
                 Text(
                     text = "🇺🇸 EN",
-                    color = if (currentLanguage == "es") TextSecond else TextPrimary,
+                    color = if (currentLanguage == "es") AxonColors.TextSecond else AxonColors.TextPrimary,
                     fontSize = 12.sp,
                     fontWeight = if (currentLanguage == "es") FontWeight.Normal else FontWeight.Bold
                 )
@@ -178,7 +169,7 @@ fun StartScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "🇪🇸 ES",
-                    color = if (currentLanguage == "es") TextPrimary else TextSecond,
+                    color = if (currentLanguage == "es") AxonColors.TextPrimary else AxonColors.TextSecond,
                     fontSize = 12.sp,
                     fontWeight = if (currentLanguage == "es") FontWeight.Bold else FontWeight.Normal
                 )
@@ -195,13 +186,13 @@ fun StartScreen(
                     val cy = size.height / 2f
                     val r = size.minDimension / 2f
                     drawCircle(
-                        color = BlueAccent.copy(alpha = pulseA * 0.10f),
+                        color = AxonColors.BlueAccent.copy(alpha = pulseA * 0.10f),
                         radius = r * pulseR,
                         center = Offset(cx, cy)
                     )
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(BlueAccent.copy(alpha = 0.25f), Color.Transparent),
+                            colors = listOf(AxonColors.BlueAccent.copy(alpha = 0.25f), Color.Transparent),
                             center = Offset(cx, cy),
                             radius = r * 0.85f
                         ),
@@ -209,7 +200,7 @@ fun StartScreen(
                         center = Offset(cx, cy)
                     )
                     drawCircle(
-                        color = BlueAccent.copy(alpha = 0.08f),
+                        color = AxonColors.BlueAccent.copy(alpha = 0.08f),
                         radius = r * 0.7f,
                         center = Offset(cx, cy),
                         style = Stroke(width = 2.dp.toPx())
@@ -220,19 +211,19 @@ fun StartScreen(
                         val nx = cx + cos(angle) * r * 0.65f
                         val ny = cy + sin(angle) * r * 0.65f
                         drawCircle(
-                            color = BlueAccent.copy(alpha = 0.4f),
+                            color = AxonColors.BlueAccent.copy(alpha = 0.4f),
                             radius = 3.dp.toPx(),
                             center = Offset(nx, ny)
                         )
                         drawLine(
-                            color = BlueAccent.copy(alpha = 0.15f),
+                            color = AxonColors.BlueAccent.copy(alpha = 0.15f),
                             start = Offset(cx, cy),
                             end = Offset(nx, ny),
                             strokeWidth = 1.dp.toPx()
                         )
                     }
                     drawCircle(
-                        color = BlueAccent,
+                        color = AxonColors.BlueAccent,
                         radius = 5.dp.toPx(),
                         center = Offset(cx, cy)
                     )
@@ -250,7 +241,7 @@ fun StartScreen(
                         moveTo(left + (right - left) * 0.22f, mid)
                         lineTo(right - (right - left) * 0.22f, mid)
                     }
-                    drawPath(aPath, color = TextPrimary, style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round))
+                    drawPath(aPath, color = AxonColors.TextPrimary, style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round))
                     val curW = iconSize * 0.32f
                     val curH = iconSize * 0.4f
                     val curX = cx + iconSize * 0.18f
@@ -265,13 +256,13 @@ fun StartScreen(
                         lineTo(curX + curW, curY + curH * 0.62f)
                         close()
                     }
-                    drawPath(cursorPath, color = VioletAccent)
+                    drawPath(cursorPath, color = AxonColors.VioletAccent)
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "AXON",
-                color = TextPrimary,
+                color = AxonColors.TextPrimary,
                 fontSize = 44.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 2.sp
@@ -279,7 +270,7 @@ fun StartScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = stringResource(id = R.string.remote_desktop_control),
-                color = TextSecond,
+                color = AxonColors.TextSecond,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
@@ -288,9 +279,9 @@ fun StartScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, BorderColor, RoundedCornerShape(20.dp)),
+                    .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = CardColor.copy(alpha = 0.85f))
+                colors = CardDefaults.cardColors(containerColor = AxonColors.CardColor.copy(alpha = 0.85f))
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -298,14 +289,14 @@ fun StartScreen(
                 ) {
                     Text(
                         text = stringResource(id = R.string.remote_mouse),
-                        color = TextPrimary,
+                        color = AxonColors.TextPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = stringResource(id = R.string.connect_instructions),
-                        color = TextSecond,
+                        color = AxonColors.TextSecond,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center,
                         lineHeight = 18.sp
@@ -334,7 +325,7 @@ fun StartScreen(
                         .fillMaxSize()
                         .background(
                             Brush.horizontalGradient(
-                                colors = listOf(BlueAccent, VioletAccent)
+                                colors = listOf(AxonColors.BlueAccent, AxonColors.VioletAccent)
                             )
                         ),
                     contentAlignment = Alignment.Center
@@ -355,7 +346,7 @@ fun StartScreen(
                 TextButton(onClick = { showGuide = true }) {
                     Text(
                         text = stringResource(id = R.string.button_guide),
-                        color = BlueAccent,
+                        color = AxonColors.BlueAccent,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -364,7 +355,7 @@ fun StartScreen(
                 TextButton(onClick = { showLicense = true }) {
                     Text(
                         text = stringResource(id = R.string.button_license),
-                        color = BlueAccent,
+                        color = AxonColors.BlueAccent,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -373,7 +364,7 @@ fun StartScreen(
             Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "Alenia Studios · GPL v3",
-                color = TextSecond.copy(alpha = 0.5f),
+                color = AxonColors.TextSecond.copy(alpha = 0.5f),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -397,9 +388,9 @@ fun ConnectionGuideDialog(onDismiss: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth(0.9f)
                 .fillMaxHeight(0.8f)
-                .border(1.dp, BorderColor, RoundedCornerShape(24.dp)),
+                .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(24.dp)),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = BgGradStart)
+            colors = CardDefaults.cardColors(containerColor = AxonColors.BgGradStart)
         ) {
             Column(
                 modifier = Modifier
@@ -408,7 +399,7 @@ fun ConnectionGuideDialog(onDismiss: () -> Unit) {
             ) {
                 Text(
                     text = stringResource(id = R.string.guide_title),
-                    color = TextPrimary,
+                    color = AxonColors.TextPrimary,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.Center,
@@ -440,11 +431,11 @@ fun ConnectionGuideDialog(onDismiss: () -> Unit) {
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = CardInner)
+                    colors = ButtonDefaults.buttonColors(containerColor = AxonColors.CardInner)
                 ) {
                     Text(
                         text = stringResource(id = R.string.close_action),
-                        color = TextPrimary,
+                        color = AxonColors.TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -457,21 +448,21 @@ fun GuideSection(title: String, description: String) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, BorderColor.copy(alpha = 0.6f), RoundedCornerShape(16.dp)),
+            .border(1.dp, AxonColors.BorderColor.copy(alpha = 0.6f), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CardInner)
+        colors = CardDefaults.cardColors(containerColor = AxonColors.CardInner)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = title,
-                color = BlueAccent,
+                color = AxonColors.BlueAccent,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = description,
-                color = TextSecond,
+                color = AxonColors.TextSecond,
                 fontSize = 13.sp,
                 lineHeight = 18.sp
             )
@@ -488,9 +479,9 @@ fun LicenseDialog(onDismiss: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth(0.9f)
                 .fillMaxHeight(0.8f)
-                .border(1.dp, BorderColor, RoundedCornerShape(24.dp)),
+                .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(24.dp)),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = BgGradStart)
+            colors = CardDefaults.cardColors(containerColor = AxonColors.BgGradStart)
         ) {
             Column(
                 modifier = Modifier
@@ -499,7 +490,7 @@ fun LicenseDialog(onDismiss: () -> Unit) {
             ) {
                 Text(
                     text = stringResource(id = R.string.license_title),
-                    color = TextPrimary,
+                    color = AxonColors.TextPrimary,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.Center,
@@ -531,11 +522,11 @@ fun LicenseDialog(onDismiss: () -> Unit) {
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = CardInner)
+                    colors = ButtonDefaults.buttonColors(containerColor = AxonColors.CardInner)
                 ) {
                     Text(
                         text = stringResource(id = R.string.close_action),
-                        color = TextPrimary,
+                        color = AxonColors.TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -548,21 +539,21 @@ fun LicenseSection(title: String, description: String) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, BorderColor.copy(alpha = 0.6f), RoundedCornerShape(16.dp)),
+            .border(1.dp, AxonColors.BorderColor.copy(alpha = 0.6f), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CardInner)
+        colors = CardDefaults.cardColors(containerColor = AxonColors.CardInner)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = title,
-                color = VioletAccent,
+                color = AxonColors.VioletAccent,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = description,
-                color = TextSecond,
+                color = AxonColors.TextSecond,
                 fontSize = 13.sp,
                 lineHeight = 18.sp
             )

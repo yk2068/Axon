@@ -1,4 +1,4 @@
-package com.example.axon.ui
+package com.aleniastudios.axon.ui
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -32,8 +32,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.axon.network.InputClient
-import com.example.axon.R
+import com.aleniastudios.axon.network.InputClient
+import com.aleniastudios.axon.R
 private val BgGradStart  = Color(0xFF0F172A)
 private val BgGradEnd    = Color(0xFF020617)
 private val BlueAccent   = Color(0xFF3B82F6)

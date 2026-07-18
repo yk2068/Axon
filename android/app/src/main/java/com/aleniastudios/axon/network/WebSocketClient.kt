@@ -1,4 +1,4 @@
-package com.example.axon.network
+package com.aleniastudios.axon.network
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket

@@ -1,4 +1,4 @@
-package com.example.axon.ui
+package com.aleniastudios.axon.ui
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
@@ -56,7 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.example.axon.R
+import com.aleniastudios.axon.R
 private const val PREFS_NAME = "axon_prefs"
 private const val KEY_LAST_IP = "last_ip"
 private const val KEY_LAST_TOKEN = "last_token"

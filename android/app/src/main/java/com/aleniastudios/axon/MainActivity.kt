@@ -1,4 +1,4 @@
-package com.example.axon
+package com.aleniastudios.axon
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -14,14 +14,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import android.content.res.Configuration
 import java.util.Locale
-import com.example.axon.network.BluetoothClient
-import com.example.axon.network.InputClient
-import com.example.axon.network.WebSocketClient
-import com.example.axon.theme.AxonTheme
-import com.example.axon.ui.ConnectScreen
-import com.example.axon.ui.MainScreen
-import com.example.axon.ui.QrScannerScreen
-import com.example.axon.ui.StartScreen
+import com.aleniastudios.axon.network.BluetoothClient
+import com.aleniastudios.axon.network.InputClient
+import com.aleniastudios.axon.network.WebSocketClient
+import com.aleniastudios.axon.theme.AxonTheme
+import com.aleniastudios.axon.ui.ConnectScreen
+import com.aleniastudios.axon.ui.MainScreen
+import com.aleniastudios.axon.ui.QrScannerScreen
+import com.aleniastudios.axon.ui.StartScreen
 enum class AppScreen {
     Start,
     Connect,

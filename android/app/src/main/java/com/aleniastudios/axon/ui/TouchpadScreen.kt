@@ -1,4 +1,4 @@
-package com.example.axon.ui
+package com.aleniastudios.axon.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -21,8 +21,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.content.Context
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -53,30 +57,28 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.axon.network.UdpClient
-import com.example.axon.network.InputClient
-import com.example.axon.R
+import com.aleniastudios.axon.network.UdpClient
+import com.aleniastudios.axon.network.InputClient
+import com.aleniastudios.axon.R
 import kotlin.math.abs
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-private val BgGradStart  = Color(0xFF0F172A)
-private val BgGradEnd    = Color(0xFF020617)
-private val BlueAccent   = Color(0xFF3B82F6)
-private val VioletAccent = Color(0xFF8B5CF6)
-private val TextPrimary  = Color(0xFFF9FAFB)
-private val TextSecond   = Color(0xFF94A3B8)
-private val BorderColor  = Color(0xFF334155)
-private val RedAccent    = Color(0xFFEF4444)
+import com.aleniastudios.axon.theme.AxonColors
 @Composable
 fun TouchpadScreen(
     client: InputClient,
     onDisconnect: () -> Unit
 ) {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("axon_prefs", Context.MODE_PRIVATE) }
+    var isAirMouse by remember { mutableStateOf(prefs.getBoolean("air_mouse_mode", false)) }
+    var airMouseSensitivity by remember { mutableStateOf(prefs.getFloat("air_mouse_sensitivity", 800f)) }
+    var showSettingsDrawer by remember { mutableStateOf(false) }
+
     val serverIp = client.getServerIp()
     val isLocalConnection = serverIp == "127.0.0.1" || serverIp == "localhost"
-    val isBluetooth = client is com.example.axon.network.BluetoothClient
+    val isBluetooth = client is com.aleniastudios.axon.network.BluetoothClient
     val useUdp = !isLocalConnection && !isBluetooth && serverIp.isNotEmpty()
     val udpClient = remember(serverIp, useUdp) {
         if (useUdp) UdpClient(serverIp) else null
@@ -112,6 +114,14 @@ fun TouchpadScreen(
             kotlinx.coroutines.delay(16)
         }
     }
+    
+    AirMouseSensor(
+        isActive = isAirMouse,
+        sensitivity = airMouseSensitivity,
+        onMove = sendMove,
+        onScroll = sendScroll
+    )
+
     val focusRequester = remember { FocusRequester() }
     var textState by remember { mutableStateOf(TextFieldValue("  ", TextRange(2))) }
     val coroutineScope = rememberCoroutineScope()
@@ -124,7 +134,7 @@ fun TouchpadScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(BgGradStart, BgGradEnd)
+                    colors = listOf(AxonColors.BgGradStart, AxonColors.BgGradEnd)
                 )
             )
             .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -136,35 +146,81 @@ fun TouchpadScreen(
                     .padding(bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(id = R.string.touchpad_title),
-                        color = TextPrimary,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.3).sp
-                    )
-                    Text(
-                        text = serverIp,
-                        color = BlueAccent,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                if (isAirMouse) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .padding(end = 8.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.05f))
+                            .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(12.dp))
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        client.sendMouseDown("left")
+                                        tryAwaitRelease()
+                                        client.sendMouseUp("left")
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "L",
+                            color = AxonColors.TextPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .padding(end = 8.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.05f))
+                            .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(12.dp))
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        client.sendMouseDown("right")
+                                        tryAwaitRelease()
+                                        client.sendMouseUp("right")
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "R",
+                            color = AxonColors.TextPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(id = R.string.touchpad_title),
+                            color = AxonColors.TextPrimary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.3).sp
+                        )
+                        Text(
+                            text = serverIp,
+                            color = AxonColors.BlueAccent,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(RedAccent.copy(alpha = 0.1f))
-                        .border(1.dp, RedAccent.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-                        .clickable { onDisconnect() }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                IconButton(onClick = { showSettingsDrawer = true }) {
                     Text(
-                        text = stringResource(id = R.string.disconnect_action),
-                        color = RedAccent,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "☰",
+                        color = AxonColors.TextPrimary,
+                        fontSize = 24.sp
                     )
                 }
             }
@@ -175,8 +231,8 @@ fun TouchpadScreen(
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color.White.copy(alpha = 0.04f))
-                        .border(1.dp, BorderColor, RoundedCornerShape(24.dp))
-                        .pointerInput(isLocalConnection) {
+                        .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(24.dp))
+                        .pointerInput(isLocalConnection, isAirMouse) {
                             var lastTapTime = 0L
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false)
@@ -198,7 +254,9 @@ fun TouchpadScreen(
                                         touchPos = null
                                         val dx = java.lang.Double.longBitsToDouble(accDx.getAndSet(0L))
                                         val dy = java.lang.Double.longBitsToDouble(accDy.getAndSet(0L))
-                                        if (dx != 0.0 || dy != 0.0) sendMove(dx, dy)
+                                        if (dx != 0.0 || dy != 0.0) {
+                                            if (isAirMouse) sendScroll(dy) else sendMove(dx, dy)
+                                        }
                                         if (isDraggingClick) {
                                             client.sendMouseUp("left")
                                         } else {
@@ -258,14 +316,24 @@ fun TouchpadScreen(
                                                     client.sendMouseDown("left")
                                                 }
                                             }
-                                            val sensitivity = 2.2
-                                            val prevDx = java.lang.Double.longBitsToDouble(accDx.get())
-                                            val prevDy = java.lang.Double.longBitsToDouble(accDy.get())
-                                            val newDx = prevDx + dragAmount.x.toDouble() * sensitivity
-                                            val newDy = prevDy + dragAmount.y.toDouble() * sensitivity
-                                            accDx.set(java.lang.Double.doubleToRawLongBits(newDx))
-                                            accDy.set(java.lang.Double.doubleToRawLongBits(newDy))
-                                            dragChannel.trySend(Unit)
+                                            if (isAirMouse) {
+                                                val prevDy = java.lang.Double.longBitsToDouble(accDy.get())
+                                                val newDy = prevDy + dragAmount.y.toDouble() * 0.5
+                                                accDy.set(java.lang.Double.doubleToRawLongBits(newDy))
+                                                if (abs(newDy) > 15.0) {
+                                                    sendScroll(if (newDy > 0) 1.0 else -1.0)
+                                                    accDy.set(0L)
+                                                }
+                                            } else {
+                                                val sensitivity = 2.2
+                                                val prevDx = java.lang.Double.longBitsToDouble(accDx.get())
+                                                val prevDy = java.lang.Double.longBitsToDouble(accDy.get())
+                                                val newDx = prevDx + dragAmount.x.toDouble() * sensitivity
+                                                val newDy = prevDy + dragAmount.y.toDouble() * sensitivity
+                                                accDx.set(java.lang.Double.doubleToRawLongBits(newDx))
+                                                accDy.set(java.lang.Double.doubleToRawLongBits(newDy))
+                                                dragChannel.trySend(Unit)
+                                            }
                                         }
                                     }
                                 }
@@ -276,19 +344,19 @@ fun TouchpadScreen(
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         touchPos?.let { pos ->
                             drawCircle(
-                                color = BlueAccent.copy(alpha = 0.15f),
+                                color = AxonColors.BlueAccent.copy(alpha = 0.15f),
                                 radius = 48.dp.toPx(),
                                 center = pos
                             )
                             drawCircle(
-                                color = BlueAccent.copy(alpha = 0.6f),
+                                color = AxonColors.BlueAccent.copy(alpha = 0.6f),
                                 radius = 5.dp.toPx(),
                                 center = pos
                             )
                         }
                         tapPos?.let { pos ->
                             drawCircle(
-                                color = BlueAccent.copy(alpha = 0.3f * (1f - tapScale.value)),
+                                color = AxonColors.BlueAccent.copy(alpha = 0.3f * (1f - tapScale.value)),
                                 radius = 38.dp.toPx() * tapScale.value,
                                 center = pos,
                                 style = Stroke(width = 1.5.dp.toPx())
@@ -298,7 +366,7 @@ fun TouchpadScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "⬡",
-                            color = TextSecond.copy(alpha = 0.15f),
+                            color = AxonColors.TextSecond.copy(alpha = 0.15f),
                             fontSize = 32.sp
                         )
                     }
@@ -311,7 +379,7 @@ fun TouchpadScreen(
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color.White.copy(alpha = 0.04f))
-                        .border(1.dp, BorderColor, RoundedCornerShape(24.dp))
+                        .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(24.dp))
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false)
@@ -352,7 +420,7 @@ fun TouchpadScreen(
                         var currentY = offsetMod
                         while (currentY < size.height + step) {
                             drawLine(
-                                color = BorderColor.copy(alpha = 0.3f),
+                                color = AxonColors.BorderColor.copy(alpha = 0.3f),
                                 start = Offset(12.dp.toPx(), currentY),
                                 end = Offset(size.width - 12.dp.toPx(), currentY),
                                 strokeWidth = 1f
@@ -362,7 +430,7 @@ fun TouchpadScreen(
                     }
                     Text(
                         text = stringResource(id = R.string.scroll_label),
-                        color = TextSecond.copy(alpha = 0.4f),
+                        color = AxonColors.TextSecond.copy(alpha = 0.4f),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 2.sp,
@@ -370,58 +438,60 @@ fun TouchpadScreen(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth().height(72.dp)) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.05f))
-                        .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    client.sendMouseDown("left")
-                                    tryAwaitRelease()
-                                    client.sendMouseUp("left")
-                                }
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(id = R.string.left_click),
-                        color = TextPrimary,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.05f))
-                        .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    client.sendMouseDown("right")
-                                    tryAwaitRelease()
-                                    client.sendMouseUp("right")
-                                }
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(id = R.string.right_click),
-                        color = TextPrimary,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+            if (!isAirMouse) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth().height(72.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(alpha = 0.05f))
+                            .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(16.dp))
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        client.sendMouseDown("left")
+                                        tryAwaitRelease()
+                                        client.sendMouseUp("left")
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.left_click),
+                            color = AxonColors.TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(alpha = 0.05f))
+                            .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(16.dp))
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        client.sendMouseDown("right")
+                                        tryAwaitRelease()
+                                        client.sendMouseUp("right")
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.right_click),
+                            color = AxonColors.TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
@@ -460,5 +530,21 @@ fun TouchpadScreen(
                 textState = TextFieldValue(" ", TextRange(1))
             })
         )
+        if (showSettingsDrawer) {
+            SettingsDrawer(
+                isAirMouse = isAirMouse,
+                onAirMouseToggle = { 
+                    isAirMouse = it
+                    prefs.edit().putBoolean("air_mouse_mode", it).apply()
+                },
+                airMouseSensitivity = airMouseSensitivity,
+                onSensitivityChange = {
+                    airMouseSensitivity = it
+                    prefs.edit().putFloat("air_mouse_sensitivity", it).apply()
+                },
+                onDisconnect = onDisconnect,
+                onDismiss = { showSettingsDrawer = false }
+            )
+        }
     }
 }

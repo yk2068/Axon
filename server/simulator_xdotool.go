@@ -25,9 +25,16 @@ var keyMap = map[string]int{
 	"Prior":      uinput.KeyPageup,
 	"Next":       uinput.KeyPagedown,
 	"Delete":     uinput.KeyDelete,
-	"F5":         uinput.KeyF5,
-	"volumeup":   uinput.KeyVolumeup,
-	"volumedown": uinput.KeyVolumedown,
+	"F5":             uinput.KeyF5,
+	"volumeup":       uinput.KeyVolumeup,
+	"volumedown":     uinput.KeyVolumedown,
+	"volumemute":     uinput.KeyMute,
+	"playpause":      uinput.KeyPlaypause,
+	"prevtrack":      uinput.KeyPrevioussong,
+	"nexttrack":      uinput.KeyNextsong,
+	"brightnessup":   uinput.KeyBrightnessup,
+	"brightnessdown": uinput.KeyBrightnessdown,
+	"printscreen":    uinput.KeySysrq,
 }
 
 type LinuxSimulator struct {
@@ -184,6 +191,20 @@ func (s *LinuxSimulator) executeCmd(cmdStr string) {
 					xKey = "XF86AudioRaiseVolume"
 				case "volumedown":
 					xKey = "XF86AudioLowerVolume"
+				case "volumemute":
+					xKey = "XF86AudioMute"
+				case "playpause":
+					xKey = "XF86AudioPlay"
+				case "prevtrack":
+					xKey = "XF86AudioPrev"
+				case "nexttrack":
+					xKey = "XF86AudioNext"
+				case "brightnessup":
+					xKey = "XF86MonBrightnessUp"
+				case "brightnessdown":
+					xKey = "XF86MonBrightnessDown"
+				case "printscreen":
+					xKey = "Print"
 				}
 				_ = exec.Command("xdotool", "key", xKey).Run()
 			}

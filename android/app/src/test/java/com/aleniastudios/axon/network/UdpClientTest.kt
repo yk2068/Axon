@@ -1,4 +1,4 @@
-package com.example.axon.network
+package com.aleniastudios.axon.network
 import org.junit.Assert.assertArrayEquals
 import org.junit.Test
 import java.nio.ByteBuffer

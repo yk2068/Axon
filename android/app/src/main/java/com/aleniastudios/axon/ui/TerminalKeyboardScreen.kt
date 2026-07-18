@@ -1,4 +1,4 @@
-package com.example.axon.ui
+package com.aleniastudios.axon.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,8 +46,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.axon.network.InputClient
-import com.example.axon.R
+import com.aleniastudios.axon.network.InputClient
+import com.aleniastudios.axon.R
+import com.aleniastudios.axon.theme.AxonColors
 private data class SpecialKey(val label: String, val key: String)
 private val specialKeyRow = listOf(
     SpecialKey("ESC", "Escape"),
@@ -65,15 +66,17 @@ private val quickActions = listOf(
     SpecialKey("←", "Left"),
     SpecialKey("→", "Right"),
 )
-private val BgGradStart  = Color(0xFF0F172A)
-private val BgGradEnd    = Color(0xFF020617)
-private val BlueAccent   = Color(0xFF3B82F6)
-private val VioletAccent = Color(0xFF8B5CF6)
-private val TextPrimary  = Color(0xFFF9FAFB)
-private val TextSecond   = Color(0xFF94A3B8)
-private val BorderColor  = Color(0xFF334155)
-private val GreenAccent  = Color(0xFF10B981)
-private val RedAccent    = Color(0xFFEF4444)
+private val systemKeyRow = listOf(
+    SpecialKey("Vol+", "volumeup"),
+    SpecialKey("Vol-", "volumedown"),
+    SpecialKey("Mute", "volumemute"),
+    SpecialKey("Br+", "brightnessup"),
+    SpecialKey("Br-", "brightnessdown"),
+    SpecialKey("⏯", "playpause"),
+    SpecialKey("⏮", "prevtrack"),
+    SpecialKey("⏭", "nexttrack"),
+    SpecialKey("PrtSc", "printscreen")
+)
 @Composable
 fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
     val focusRequester = remember { FocusRequester() }
@@ -155,7 +158,7 @@ fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(BgGradStart, BgGradEnd)
+                    colors = listOf(AxonColors.BgGradStart, AxonColors.BgGradEnd)
                 )
             )
             .padding(12.dp)
@@ -166,7 +169,7 @@ fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
         ) {
             Text(
                 stringResource(id = R.string.terminal_title),
-                color = TextPrimary,
+                color = AxonColors.TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-0.3).sp,
@@ -175,13 +178,13 @@ fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(RedAccent.copy(alpha = 0.1f))
-                    .border(1.dp, RedAccent.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                    .background(AxonColors.RedAccent.copy(alpha = 0.1f))
+                    .border(1.dp, AxonColors.RedAccent.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
                     .clickable { onDisconnect() }
                     .padding(horizontal = 12.dp, vertical = 7.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(stringResource(id = R.string.exit_action), color = RedAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(id = R.string.exit_action), color = AxonColors.RedAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
         Box(
@@ -190,7 +193,7 @@ fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.White.copy(alpha = 0.04f))
-                .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+                .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(16.dp))
                 .clickable {
                     focusManager.clearFocus()
                     focusRequester.requestFocus()
@@ -202,7 +205,7 @@ fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
                 item {
                     Text(
                         stringResource(id = R.string.terminal_bridge_msg, client.getServerIp()),
-                        color = TextSecond.copy(alpha = 0.5f),
+                        color = AxonColors.TextSecond.copy(alpha = 0.5f),
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         lineHeight = 16.sp
@@ -211,7 +214,7 @@ fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
                 items(history) { log ->
                     Text(
                         text = log,
-                        color = if (log.startsWith("key:") || log.startsWith("[")) TextSecond else GreenAccent,
+                        color = if (log.startsWith("key:") || log.startsWith("[")) AxonColors.TextSecond else AxonColors.GreenAccent,
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace,
                         lineHeight = 18.sp
@@ -219,9 +222,9 @@ fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
                 }
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("axon:~$ ", color = BlueAccent, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                        Text(textState, color = GreenAccent, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                        Text("█", color = BlueAccent.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                        Text("axon:~$ ", color = AxonColors.BlueAccent, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Text(textState, color = AxonColors.GreenAccent, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                        Text("█", color = AxonColors.BlueAccent.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
                     }
                 }
             }
@@ -240,19 +243,19 @@ fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
                         .clip(RoundedCornerShape(10.dp))
                         .background(
                             if (isModActive) {
-                                Brush.horizontalGradient(colors = listOf(BlueAccent, VioletAccent))
+                                Brush.horizontalGradient(colors = listOf(AxonColors.BlueAccent, AxonColors.VioletAccent))
                             } else {
                                 Brush.horizontalGradient(colors = listOf(Color.White.copy(alpha = 0.05f), Color.White.copy(alpha = 0.05f)))
                             }
                         )
-                        .border(1.dp, if (isModActive) Color.Transparent else BorderColor, RoundedCornerShape(10.dp))
+                        .border(1.dp, if (isModActive) Color.Transparent else AxonColors.BorderColor, RoundedCornerShape(10.dp))
                         .clickable { sendKey(sk.key) }
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         sk.label,
-                        color = if (isModActive) Color.White else TextSecond,
+                        color = if (isModActive) Color.White else AxonColors.TextSecond,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
@@ -271,15 +274,42 @@ fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(BlueAccent.copy(alpha = 0.1f))
-                        .border(1.dp, BlueAccent.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                        .background(AxonColors.BlueAccent.copy(alpha = 0.1f))
+                        .border(1.dp, AxonColors.BlueAccent.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
                         .clickable { sendKey(qa.key) }
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         qa.label,
-                        color = BlueAccent,
+                        color = AxonColors.BlueAccent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            systemKeyRow.forEach { sk ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(10.dp))
+                        .clickable { sendKey(sk.key) }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        sk.label,
+                        color = AxonColors.TextSecond,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
@@ -293,13 +323,13 @@ fun TerminalKeyboardScreen(client: InputClient, onDisconnect: () -> Unit) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White.copy(alpha = 0.04f))
-                .border(1.dp, BorderColor, RoundedCornerShape(12.dp))
+                .border(1.dp, AxonColors.BorderColor, RoundedCornerShape(12.dp))
                 .padding(12.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 stringResource(id = R.string.tap_to_activate),
-                color = TextSecond,
+                color = AxonColors.TextSecond,
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace
             )
