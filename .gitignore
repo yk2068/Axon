@@ -25,14 +25,13 @@ android/.externalNativeBuild/
 android/app/release/
 
 # OS
-.superpowers/
 *.exe
 *.dll
 *.so
 *.dylib
 .vscode/dist/
 build/
-
+.vscode
 # Patch residue and debug artifacts
 *.oaQFx6k
 *.orig
