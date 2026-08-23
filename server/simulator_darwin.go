@@ -20,8 +20,8 @@ func initSimulator() InputSimulator {
 		ch: make(chan string, 200),
 	}
 	if _, err := exec.LookPath("cliclick"); err != nil {
-		fmt.Println("[INPUT] Warning: cliclick is not installed. Mouse and keyboard simulation will not work.")
-		fmt.Println("[INPUT] Install it with: brew install cliclick")
+		logger.Println("[INPUT] Warning: cliclick is not installed. Mouse and keyboard simulation will not work.")
+		logger.Println("[INPUT] Install it with: brew install cliclick")
 	}
 	go s.loop()
 	return s
@@ -69,7 +69,7 @@ func (s *DarwinSimulator) execute(cmd string) {
 		_ = exec.Command("cliclick", "kd:arrow-down").Run()
 	case "type":
 		if len(parts) == 2 {
-			_ = exec.Command("cliclick", "t:"+parts[1]).Run()
+			_ = exec.Command("osascript", "-e", "on run argv", "-e", "tell application \"System Events\" to keystroke (item 1 of argv)", "-e", "end run", parts[1]).Run()
 		}
 	case "key":
 		if len(parts) == 2 {

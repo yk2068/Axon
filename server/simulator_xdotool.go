@@ -45,15 +45,15 @@ func initSimulator() InputSimulator {
 	var err error
 	s.mouse, err = uinput.CreateMouse("/dev/uinput", []byte("axon-mouse"))
 	if err != nil {
-		fmt.Println("Warning: uinput mouse failed, using xdotool fallback:", err)
+		logger.Println("Warning: uinput mouse failed, using xdotool fallback:", err)
 	}
 	s.keyboard, err = uinput.CreateKeyboard("/dev/uinput", []byte("axon-keyboard"))
 	if err != nil {
-		fmt.Println("Warning: uinput keyboard failed, using xdotool fallback:", err)
+		logger.Println("Warning: uinput keyboard failed, using xdotool fallback:", err)
 	}
 	if s.mouse == nil || s.keyboard == nil {
 		if _, err := exec.LookPath("xdotool"); err != nil {
-			fmt.Println("Warning: xdotool is not installed. Fallback input simulation will fail.")
+			logger.Println("Warning: xdotool is not installed. Fallback input simulation will fail.")
 		}
 	}
 	go s.loop()
@@ -72,121 +72,147 @@ func (s *LinuxSimulator) Send(cmdStr string) {
 }
 func (s *LinuxSimulator) executeCmd(cmdStr string) {
 	if strings.HasPrefix(cmdStr, "mousemove_relative") {
-		var dx, dy float64
-		_, err := fmt.Sscanf(cmdStr, "mousemove_relative -- %f %f", &dx, &dy)
-		if err == nil {
-			if s.mouse != nil {
-				_ = s.mouse.Move(int32(dx), int32(dy))
-			} else {
-				_ = exec.Command("xdotool", "mousemove_relative", "--", fmt.Sprintf("%d", int32(dx)), fmt.Sprintf("%d", int32(dy))).Run()
-			}
-		}
+		s.handleMouseMove(cmdStr)
 	} else if strings.HasPrefix(cmdStr, "click") {
-		var btn string
-		var count int
-		_, err := fmt.Sscanf(cmdStr, "click --repeat %d %s", &count, &btn)
-		if err != nil {
-			_, err = fmt.Sscanf(cmdStr, "click %s", &btn)
-			count = 1
-		}
-		if err == nil {
-			if s.mouse != nil {
-				for i := 0; i < count; i++ {
-					switch btn {
-					case "1":
-						_ = s.mouse.LeftClick()
-					case "2":
-						_ = s.mouse.MiddleClick()
-					case "3":
-						_ = s.mouse.RightClick()
-					case "4":
-						_ = s.mouse.Wheel(false, 1)
-					case "5":
-						_ = s.mouse.Wheel(false, -1)
-					}
-				}
-			} else {
-				args := []string{"click"}
-				if count > 1 {
-					args = append(args, "--repeat", fmt.Sprintf("%d", count))
-				}
-				args = append(args, btn)
-				_ = exec.Command("xdotool", args...).Run()
-			}
-		}
+		s.handleClick(cmdStr)
 	} else if strings.HasPrefix(cmdStr, "mousedown") {
-		var btn string
-		_, err := fmt.Sscanf(cmdStr, "mousedown %s", &btn)
-		if err == nil {
-			if s.mouse != nil {
-				switch btn {
-				case "1":
-					_ = s.mouse.LeftPress()
-				case "3":
-					_ = s.mouse.RightPress()
-				}
-			} else {
-				_ = exec.Command("xdotool", "mousedown", btn).Run()
-			}
-		}
+		s.handleMouseDown(cmdStr)
 	} else if strings.HasPrefix(cmdStr, "mouseup") {
-		var btn string
-		_, err := fmt.Sscanf(cmdStr, "mouseup %s", &btn)
-		if err == nil {
-			if s.mouse != nil {
+		s.handleMouseUp(cmdStr)
+	} else if strings.HasPrefix(cmdStr, "type") {
+		s.handleType(cmdStr)
+	} else if strings.HasPrefix(cmdStr, "key ") {
+		s.handleKey(cmdStr)
+	}
+}
+
+func (s *LinuxSimulator) handleMouseMove(cmdStr string) {
+	var dx, dy float64
+	_, err := fmt.Sscanf(cmdStr, "mousemove_relative -- %f %f", &dx, &dy)
+	if err == nil {
+		if s.mouse != nil {
+			_ = s.mouse.Move(int32(dx), int32(dy))
+		} else {
+			_ = exec.Command("xdotool", "mousemove_relative", "--", fmt.Sprintf("%d", int32(dx)), fmt.Sprintf("%d", int32(dy))).Run()
+		}
+	}
+}
+
+func (s *LinuxSimulator) handleClick(cmdStr string) {
+	var btn string
+	var count int
+	_, err := fmt.Sscanf(cmdStr, "click --repeat %d %s", &count, &btn)
+	if err != nil {
+		_, err = fmt.Sscanf(cmdStr, "click %s", &btn)
+		count = 1
+	}
+	if err == nil {
+		if s.mouse != nil {
+			for i := 0; i < count; i++ {
 				switch btn {
 				case "1":
-					_ = s.mouse.LeftRelease()
+					_ = s.mouse.LeftClick()
+				case "2":
+					_ = s.mouse.MiddleClick()
 				case "3":
-					_ = s.mouse.RightRelease()
+					_ = s.mouse.RightClick()
+				case "4":
+					_ = s.mouse.Wheel(false, 1)
+				case "5":
+					_ = s.mouse.Wheel(false, -1)
 				}
-			} else {
-				_ = exec.Command("xdotool", "mouseup", btn).Run()
-			}
-		}
-	} else if strings.HasPrefix(cmdStr, "type") {
-		parts := strings.SplitN(cmdStr, " -- ", 2)
-		if len(parts) == 2 {
-			text := parts[1]
-			if len(text) >= 2 && text[0] == '"' && text[len(text)-1] == '"' {
-				text = text[1 : len(text)-1]
-			}
-			if s.keyboard != nil {
-				for _, char := range text {
-					s.typeChar(char)
-				}
-			} else {
-				_ = exec.Command("xdotool", "type", "--", text).Run()
-			}
-		}
-	} else if strings.HasPrefix(cmdStr, "key ") {
-		key := strings.TrimPrefix(cmdStr, "key ")
-		if strings.Contains(key, "+") {
-			parts := strings.Split(key, "+")
-			if len(parts) == 2 {
-				s.KeyCombo(parts[0], parts[1])
 			}
 		} else {
-			if s.keyboard != nil {
-				if code, ok := keyMap[key]; ok {
-					_ = s.keyboard.KeyPress(code)
-				} else if len(key) == 1 {
-					s.typeChar(rune(key[0]))
-				}
-			} else {
-				xKey := key
-				switch key {
-				case "Prior":
-					xKey = "Page_Up"
-				case "Next":
-					xKey = "Page_Down"
-				case "volumeup":
-					xKey = "XF86AudioRaiseVolume"
-				case "volumedown":
-					xKey = "XF86AudioLowerVolume"
-				}
-				_ = exec.Command("xdotool", "key", xKey).Run()
+			args := []string{"click"}
+			if count > 1 {
+				args = append(args, "--repeat", fmt.Sprintf("%d", count))
 			}
+			args = append(args, btn)
+			_ = exec.Command("xdotool", args...).Run()
+		}
+	}
+}
+
+func (s *LinuxSimulator) handleMouseDown(cmdStr string) {
+	var btn string
+	_, err := fmt.Sscanf(cmdStr, "mousedown %s", &btn)
+	if err == nil {
+		if s.mouse != nil {
+			switch btn {
+			case "1":
+				_ = s.mouse.LeftPress()
+			case "3":
+				_ = s.mouse.RightPress()
+			}
+		} else {
+			_ = exec.Command("xdotool", "mousedown", btn).Run()
+		}
+	}
+}
+
+func (s *LinuxSimulator) handleMouseUp(cmdStr string) {
+	var btn string
+	_, err := fmt.Sscanf(cmdStr, "mouseup %s", &btn)
+	if err == nil {
+		if s.mouse != nil {
+			switch btn {
+			case "1":
+				_ = s.mouse.LeftRelease()
+			case "3":
+				_ = s.mouse.RightRelease()
+			}
+		} else {
+			_ = exec.Command("xdotool", "mouseup", btn).Run()
+		}
+	}
+}
+
+func (s *LinuxSimulator) handleType(cmdStr string) {
+	parts := strings.SplitN(cmdStr, " -- ", 2)
+	if len(parts) == 2 {
+		text := parts[1]
+		if len(text) >= 2 && text[0] == '"' && text[len(text)-1] == '"' {
+			text = text[1 : len(text)-1]
+		}
+		if s.keyboard != nil {
+			for _, char := range text {
+				s.typeChar(char)
+			}
+		} else {
+			cmd := exec.Command("xdotool", "type", "--file", "-")
+			cmd.Stdin = strings.NewReader(text)
+			_ = cmd.Run()
+		}
+	}
+}
+
+func (s *LinuxSimulator) handleKey(cmdStr string) {
+	key := strings.TrimPrefix(cmdStr, "key ")
+	if strings.Contains(key, "+") {
+		parts := strings.Split(key, "+")
+		if len(parts) == 2 {
+			s.KeyCombo(parts[0], parts[1])
+		}
+	} else {
+		if s.keyboard != nil {
+			if code, ok := keyMap[key]; ok {
+				_ = s.keyboard.KeyPress(code)
+			} else if len(key) == 1 {
+				s.typeChar(rune(key[0]))
+			}
+		} else {
+			xKey := key
+			switch key {
+			case "Prior":
+				xKey = "Page_Up"
+			case "Next":
+				xKey = "Page_Down"
+			case "volumeup":
+				xKey = "XF86AudioRaiseVolume"
+			case "volumedown":
+				xKey = "XF86AudioLowerVolume"
+			}
+			_ = exec.Command("xdotool", "key", xKey).Run()
 		}
 	}
 }

@@ -3,8 +3,8 @@
 package main
 
 import (
-	"syscall"
 	"golang.org/x/sys/windows"
+	"syscall"
 )
 
 func init() {

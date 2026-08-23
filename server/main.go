@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -31,7 +32,7 @@ func setupADBReverse() {
 	}
 	portStr := fmt.Sprintf("tcp:%d", port)
 	if err := exec.Command("adb", "reverse", portStr, portStr).Run(); err != nil {
-		fmt.Printf("[ADB] Warning: failed to setup adb reverse for port %d: exit status 1\n", port)
+		logger.Printf("[ADB] Warning: failed to setup adb reverse for port %d: exit status 1\n", port)
 	}
 }
 func getRGBColor(phase float64) (int, int, int) {
@@ -109,13 +110,13 @@ func tryPortWithFallback(requestedPort int) (net.Listener, int, error) {
 	if err == nil {
 		return listener, requestedPort, nil
 	}
-	fmt.Printf("[PORT] Port %d unavailable, attempting dynamic port allocation...\n", requestedPort)
+	logger.Printf("[PORT] Port %d unavailable, attempting dynamic port allocation...\n", requestedPort)
 	listener, err = createListenerWithReuseAddr(0)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to allocate any port: %v", err)
 	}
 	addr := listener.Addr().(*net.TCPAddr)
-	fmt.Printf("[PORT] Successfully allocated dynamic port: %d\n", addr.Port)
+	logger.Printf("[PORT] Successfully allocated dynamic port: %d\n", addr.Port)
 	return listener, addr.Port, nil
 }
 
@@ -127,7 +128,7 @@ func tryUDPPortWithFallback(requestedPort int) (*net.UDPConn, int, error) {
 			return conn, requestedPort, nil
 		}
 	}
-	fmt.Printf("[PORT] UDP Port %d unavailable, attempting dynamic port allocation...\n", requestedPort)
+	logger.Printf("[PORT] UDP Port %d unavailable, attempting dynamic port allocation...\n", requestedPort)
 	addr, err = net.ResolveUDPAddr("udp", ":0")
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to allocate any UDP port: %v", err)
@@ -137,7 +138,7 @@ func tryUDPPortWithFallback(requestedPort int) (*net.UDPConn, int, error) {
 		return nil, 0, fmt.Errorf("failed to allocate any UDP port: %v", err)
 	}
 	actualPort := conn.LocalAddr().(*net.UDPAddr).Port
-	fmt.Printf("[PORT] Successfully allocated dynamic UDP port: %d\n", actualPort)
+	logger.Printf("[PORT] Successfully allocated dynamic UDP port: %d\n", actualPort)
 	return conn, actualPort, nil
 }
 
@@ -149,6 +150,7 @@ var (
 	simulator         InputSimulator
 	port              int
 	udpPort           int
+	logger            = log.New(os.Stdout, "", log.Ldate|log.Ltime)
 )
 
 type ClientMessage struct {
@@ -176,6 +178,7 @@ var upgrader = websocket.Upgrader{
 			fmt.Sprintf("http://%s:%d", localIP, port),
 			fmt.Sprintf("http://127.0.0.1:%d", port),
 			fmt.Sprintf("http://localhost:%d", port),
+			"http://" + r.Host,
 		}
 		for _, a := range allowed {
 			if origin == a {
@@ -186,19 +189,15 @@ var upgrader = websocket.Upgrader{
 		if !strings.HasPrefix(origin, "http") {
 			return true
 		}
-		fmt.Printf("[SECURITY] Rejected WebSocket from origin: %s\n", origin)
+		logger.Printf("[SECURITY] Rejected WebSocket from origin: %s\n", origin)
 		return false
 	},
 }
 
 func generateToken() string {
-	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	for i := range b {
-		b[i] = chars[int(b[i])%len(chars)]
-	}
-	return string(b)
+	b := make([]byte, 16)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
 }
 func handleAuthentication(w http.ResponseWriter, r *http.Request) bool {
 	token := r.URL.Query().Get("token")
@@ -230,7 +229,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	activeClientIP = ip
 	activeClientNetIP = net.ParseIP(ip)
 	activeClientMu.Unlock()
-	fmt.Printf("[CONNECTION] Client connected from: %s\n", remoteAddrStr)
+	logger.Printf("[CONNECTION] Client connected from: %s\n", remoteAddrStr)
 	done := make(chan bool)
 	defer func() {
 		close(done)
@@ -240,7 +239,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			activeClientNetIP = nil
 		}
 		activeClientMu.Unlock()
-		fmt.Println("[DISCONNECTION] Client disconnected")
+		logger.Println("[DISCONNECTION] Client disconnected")
 	}()
 	go startPingLoop(conn, done)
 	handleMessages(conn)
@@ -283,10 +282,34 @@ func handleMessages(conn *websocket.Conn) {
 		}
 		if msg.Type == "pong" {
 			rtt := time.Now().UnixMilli() - msg.Timestamp
-			fmt.Printf("[LATENCY] RTT Latency: %d ms\n", rtt)
+			logger.Printf("[LATENCY] RTT Latency: %d ms\n", rtt)
 			continue
 		}
-		dispatchCommand(msg)
+		switch msg.Type {
+		case "move":
+			simulator.MoveMouse(msg.Dx, msg.Dy)
+		case "click":
+			simulator.Click(msg.Button)
+		case "mousedown":
+			simulator.MouseDown(msg.Button)
+		case "mouseup":
+			simulator.MouseUp(msg.Button)
+		case "scroll":
+			dir := "down"
+			if msg.Dy > 0 {
+				dir = "up"
+			}
+			simulator.Scroll(dir)
+		case "type":
+			logger.Printf("[KEYBOARD] Typing text: %q\n", msg.Text)
+			simulator.Type(msg.Text)
+		case "key":
+			logger.Printf("[KEYBOARD] Pressing special key: %q\n", msg.Key)
+			simulator.Key(msg.Key)
+		case "keycombo":
+			logger.Printf("[KEYBOARD] Pressing combo: %s+%s\n", msg.Modifier, msg.Key)
+			simulator.KeyCombo(msg.Modifier, msg.Key)
+		}
 	}
 }
 func startUDPServer(conn *net.UDPConn) {
@@ -334,7 +357,9 @@ func startADBKeepalive() {
 		hasClient := activeClientIP != ""
 		activeClientMu.RUnlock()
 		if !hasClient {
-			_ = exec.Command("adb", "reverse", portStr, portStr).Run()
+			go func() {
+				_ = exec.Command("adb", "reverse", portStr, portStr).Run()
+			}()
 		}
 	}
 }
@@ -354,42 +379,42 @@ func selfUpdate() {
 		binaryName += ".exe"
 	}
 	url := "https://github.com/Kaia-Alenia/Axon/releases/latest/download/" + binaryName
-	fmt.Printf("[UPDATE] Downloading latest version from:\n  %s\n", url)
+	logger.Printf("[UPDATE] Downloading latest version from:\n  %s\n", url)
 	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Printf("[UPDATE] Error: failed to connect: %v\n", err)
+		logger.Printf("[UPDATE] Error: failed to connect: %v\n", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("[UPDATE] Error: server returned %s\n", resp.Status)
+		logger.Printf("[UPDATE] Error: server returned %s\n", resp.Status)
 		os.Exit(1)
 	}
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Printf("[UPDATE] Error: could not determine executable path: %v\n", err)
+		logger.Printf("[UPDATE] Error: could not determine executable path: %v\n", err)
 		os.Exit(1)
 	}
 	tmpPath := exePath + ".new"
 	out, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
 	if err != nil {
-		fmt.Printf("[UPDATE] Error: could not write update: %v\n", err)
+		logger.Printf("[UPDATE] Error: could not write update: %v\n", err)
 		os.Exit(1)
 	}
 	_, err = io.Copy(out, resp.Body)
 	out.Close()
 	if err != nil {
-		fmt.Printf("[UPDATE] Error: download failed: %v\n", err)
+		logger.Printf("[UPDATE] Error: download failed: %v\n", err)
 		_ = os.Remove(tmpPath)
 		os.Exit(1)
 	}
 	if err := os.Rename(tmpPath, exePath); err != nil {
-		fmt.Printf("[UPDATE] Download complete. Could not auto-replace (file may be in use).\n")
-		fmt.Printf("[UPDATE] New binary saved at: %s\n", tmpPath)
-		fmt.Printf("[UPDATE] Manually replace the current binary with the downloaded file.\n")
+		logger.Printf("[UPDATE] Download complete. Could not auto-replace (file may be in use).\n")
+		logger.Printf("[UPDATE] New binary saved at: %s\n", tmpPath)
+		logger.Printf("[UPDATE] Manually replace the current binary with the downloaded file.\n")
 		os.Exit(0)
 	}
-	fmt.Println("[UPDATE] Update applied successfully. Restart axon to use the new version.")
+	logger.Println("[UPDATE] Update applied successfully. Restart axon to use the new version.")
 	os.Exit(0)
 }
 
@@ -414,27 +439,27 @@ func main() {
 	setupADBReverse()
 	ip := getLocalIP()
 	if ip == "" {
-		fmt.Println("Error: Could not retrieve local IP address")
+		logger.Println("Error: Could not retrieve local IP address")
 		os.Exit(1)
 	}
 	tcpListener, actualPort, err := tryPortWithFallback(port)
 	if err != nil {
-		fmt.Printf(" Error: Failed to bind to any port: %v\n", err)
+		logger.Printf(" Error: Failed to bind to any port: %v\n", err)
 		os.Exit(1)
 	}
 	defer tcpListener.Close()
 	if actualPort != port {
-		fmt.Printf("[PORT] Using dynamic port: %d (requested: %d)\n", actualPort, port)
+		logger.Printf("[PORT] Using dynamic port: %d (requested: %d)\n", actualPort, port)
 		port = actualPort
 	}
 
 	udpConn, actualUdpPort, err := tryUDPPortWithFallback(udpPort)
 	if err != nil {
-		fmt.Printf(" Error: Failed to bind UDP port: %v\n", err)
+		logger.Printf(" Error: Failed to bind UDP port: %v\n", err)
 		os.Exit(1)
 	}
 	if actualUdpPort != udpPort {
-		fmt.Printf("[PORT] Using dynamic UDP port: %d (requested: %d)\n", actualUdpPort, udpPort)
+		logger.Printf("[PORT] Using dynamic UDP port: %d (requested: %d)\n", actualUdpPort, udpPort)
 		udpPort = actualUdpPort
 	}
 	activeToken = generateToken()
@@ -462,7 +487,6 @@ func main() {
 	time.Sleep(30 * time.Millisecond)
 	printLine(colorizeRainbow(fmt.Sprintf("     ADDRESS : %s", ip), 0.5), lineDelay)
 	printLine(colorizeRainbow(fmt.Sprintf("     PORTS   : %d (TCP/WS)  ·  %d (UDP)", port, udpPort), 0.5), lineDelay)
-	printLine(colorizeRainbow("     SEC TOKEN : "+activeToken, 0.5), lineDelay)
 	time.Sleep(30 * time.Millisecond)
 	printLine(colorizeRainbow("    ────────────────────────────────────────────────────", 0.5), lineDelay)
 	time.Sleep(30 * time.Millisecond)
@@ -483,16 +507,16 @@ func main() {
 	go startUDPServer(udpConn)
 	subFS, err := fs.Sub(webFS, "web")
 	if err != nil {
-		fmt.Println(" Error loading static web files:", err)
+		logger.Println(" Error loading static web files:", err)
 		os.Exit(1)
 	}
 	http.Handle("/", http.FileServer(http.FS(subFS)))
 	http.HandleFunc("/ws", handleWebSocket)
 	server := &http.Server{}
-	fmt.Printf("[SERVER]  Listening on port %d...\n", port)
+	logger.Printf("[SERVER]  Listening on port %d...\n", port)
 	err = server.Serve(tcpListener)
 	if err != nil {
-		fmt.Printf(" Error starting the server: %v\n", err)
+		logger.Printf(" Error starting the server: %v\n", err)
 		os.Exit(1)
 	}
 }

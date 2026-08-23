@@ -32,3 +32,8 @@ android/app/release/
 *.dylib
 .vscode/dist/
 build/
+
+# Patch residue and debug artifacts
+*.oaQFx6k
+*.orig
+*.rej

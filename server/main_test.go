@@ -1,6 +1,9 @@
 package main
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -136,6 +139,96 @@ func TestColorizeRainbow(t *testing.T) {
 			got := colorizeRainbow(tt.text, tt.frequency)
 			if !tt.wantFunc(got) {
 				t.Errorf("colorizeRainbow() = %q, want matching wantFunc", got)
+			}
+		})
+	}
+}
+
+func TestGenerateToken(t *testing.T) {
+	token1 := generateToken()
+	token2 := generateToken()
+
+	if len(token1) != 32 {
+		t.Errorf("Expected token length 32, got %d", len(token1))
+	}
+	if len(token2) != 32 {
+		t.Errorf("Expected token length 32, got %d", len(token2))
+	}
+
+	if token1 == token2 {
+		t.Errorf("Expected tokens to be unique, got %s twice", token1)
+	}
+
+	for _, char := range token1 {
+		if !strings.ContainsRune("0123456789abcdef", char) {
+			t.Errorf("Expected hex token, got non-hex char %c", char)
+		}
+	}
+}
+
+func TestHandleAuthentication(t *testing.T) {
+	activeToken = "test-token-123"
+
+	tests := []struct {
+		name           string
+		token          string
+		expectedResult bool
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name:           "Valid Token",
+			token:          "test-token-123",
+			expectedResult: true,
+			expectedStatus: http.StatusOK,
+			expectedBody:   "",
+		},
+		{
+			name:           "Invalid Token",
+			token:          "wrong-token",
+			expectedResult: false,
+			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Unauthorized\n",
+		},
+		{
+			name:           "Missing Token",
+			token:          "",
+			expectedResult: false,
+			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Unauthorized\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/?token="+tc.token, nil)
+			if tc.token == "" {
+				req = httptest.NewRequest(http.MethodGet, "/", nil)
+			}
+
+			w := httptest.NewRecorder()
+
+			result := handleAuthentication(w, req)
+
+			if result != tc.expectedResult {
+				t.Errorf("handleAuthentication() returned %v, expected %v", result, tc.expectedResult)
+			}
+
+			res := w.Result()
+			defer res.Body.Close()
+
+			if res.StatusCode != tc.expectedStatus {
+				t.Errorf("Expected status code %d, got %d", tc.expectedStatus, res.StatusCode)
+			}
+
+			// For valid requests, httptest.NewRecorder() has 200 OK by default
+			// but handleAuthentication does not write to the response body for valid requests.
+
+			if !tc.expectedResult {
+				body, _ := io.ReadAll(res.Body)
+				if string(body) != tc.expectedBody {
+					t.Errorf("Expected body %q, got %q", tc.expectedBody, string(body))
+				}
 			}
 		})
 	}

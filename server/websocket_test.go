@@ -2,8 +2,11 @@ package main
 
 import (
 	"github.com/gorilla/websocket"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -11,6 +14,14 @@ import (
 func TestWebSocketOrigin(t *testing.T) {
 	activeToken = "test_token"
 	server := httptest.NewServer(http.HandlerFunc(handleWebSocket))
+	
+	// Parse the randomly assigned port and update the global port variable
+	// so the CheckOrigin function allows it.
+	_, portStr, err := net.SplitHostPort(strings.TrimPrefix(server.URL, "http://"))
+	if err == nil {
+		p, _ := strconv.Atoi(portStr)
+		port = p
+	}
 	defer server.Close()
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/?token=test_token"
 	dialer := websocket.Dialer{}
@@ -34,6 +45,14 @@ func TestWebSocketOrigin(t *testing.T) {
 	conn.Close()
 	dialer3 := websocket.Dialer{}
 	headers3 := http.Header{}
+
+	// Temporarily mock the port for the test to match the httptest server's port
+	u, _ := url.Parse(server.URL)
+	testPort, _ := strconv.Atoi(u.Port())
+	originalPort := port
+	port = testPort
+	defer func() { port = originalPort }()
+
 	headers3.Add("Origin", server.URL)
 	conn3, resp3, err3 := dialer3.Dial(wsURL, headers3)
 	if err3 != nil {

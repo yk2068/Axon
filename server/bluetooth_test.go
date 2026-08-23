@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -54,9 +53,9 @@ func TestBluetoothServerStarts(t *testing.T) {
 	defer func() {
 		simulator = originalSimulator
 	}()
-	fmt.Println("[TEST] Bluetooth server initialization test started")
+	t.Log("[TEST] Bluetooth server initialization test started")
 	time.Sleep(100 * time.Millisecond)
-	fmt.Println("[TEST] Bluetooth server initialization completed successfully")
+	t.Log("[TEST] Bluetooth server initialization completed successfully")
 }
 func TestBluetoothClientConnection(t *testing.T) {
 	originalSimulator := simulator
@@ -73,7 +72,7 @@ func TestBluetoothClientConnection(t *testing.T) {
 		tcpConn.SetNoDelay(true)
 		tcpConn.SetKeepAlive(true)
 	}
-	fmt.Println("[TEST] Client connection successful")
+	t.Log("[TEST] Client connection successful")
 }
 func TestBluetoothMoveMessage(t *testing.T) {
 	mock := &MockSimulator{}
@@ -95,7 +94,7 @@ func TestBluetoothMoveMessage(t *testing.T) {
 	if mock.lastMove[0] != 10.5 || mock.lastMove[1] != 20.3 {
 		t.Errorf("Move command failed: got (%f, %f), want (10.5, 20.3)", mock.lastMove[0], mock.lastMove[1])
 	}
-	fmt.Println("[TEST] Move message processing passed")
+	t.Log("[TEST] Move message processing passed")
 }
 func TestBluetoothClickMessage(t *testing.T) {
 	mock := &MockSimulator{}
@@ -116,7 +115,7 @@ func TestBluetoothClickMessage(t *testing.T) {
 	if mock.lastClick != "left" {
 		t.Errorf("Click command failed: got %q, want %q", mock.lastClick, "left")
 	}
-	fmt.Println("[TEST] Click message processing passed")
+	t.Log("[TEST] Click message processing passed")
 }
 func TestBluetoothTypeMessage(t *testing.T) {
 	mock := &MockSimulator{}
@@ -138,7 +137,7 @@ func TestBluetoothTypeMessage(t *testing.T) {
 	if mock.lastType != testText {
 		t.Errorf("Type command failed: got %q, want %q", mock.lastType, testText)
 	}
-	fmt.Println("[TEST] Type message processing passed")
+	t.Log("[TEST] Type message processing passed")
 }
 func TestBluetoothDisconnection(t *testing.T) {
 	mock := &MockSimulator{}
@@ -164,7 +163,7 @@ func TestBluetoothDisconnection(t *testing.T) {
 		t.Fatalf("Failed to connect: %v", err)
 	}
 	conn.Close()
-	fmt.Println("[TEST] Disconnection handling passed")
+	t.Log("[TEST] Disconnection handling passed")
 }
 func TestBluetoothLatency(t *testing.T) {
 	mock := &MockSimulator{}
@@ -191,7 +190,7 @@ func TestBluetoothLatency(t *testing.T) {
 	if latencyPerMsg > 5 {
 		t.Logf("Warning: High latency per message: %d ms", latencyPerMsg)
 	}
-	fmt.Printf("[TEST] Latency test completed: avg %.2f ms per message\n", float64(elapsed.Milliseconds())/100.0)
+	t.Logf("[TEST] Latency test completed: avg %.2f ms per message\n", float64(elapsed.Milliseconds())/100.0)
 }
 func TestBluetoothMouseDownUp(t *testing.T) {
 	mock := &MockSimulator{}
@@ -218,7 +217,7 @@ func TestBluetoothMouseDownUp(t *testing.T) {
 	if mock.lastMouseUp != "right" {
 		t.Errorf("MouseUp failed: got %q, want %q", mock.lastMouseUp, "right")
 	}
-	fmt.Println("[TEST] MouseDown/MouseUp processing passed")
+	t.Log("[TEST] MouseDown/MouseUp processing passed")
 }
 func TestBluetoothScrollMessage(t *testing.T) {
 	mock := &MockSimulator{}
@@ -245,7 +244,7 @@ func TestBluetoothScrollMessage(t *testing.T) {
 	if mock.lastScroll != "down" {
 		t.Errorf("Scroll down failed: got %q, want %q", mock.lastScroll, "down")
 	}
-	fmt.Println("[TEST] Scroll message processing passed")
+	t.Log("[TEST] Scroll message processing passed")
 }
 func TestBluetoothKeyCombo(t *testing.T) {
 	mock := &MockSimulator{}
@@ -267,7 +266,7 @@ func TestBluetoothKeyCombo(t *testing.T) {
 	if mock.lastCombo[0] != "ctrl" || mock.lastCombo[1] != "c" {
 		t.Errorf("KeyCombo failed: got (%q, %q), want (ctrl, c)", mock.lastCombo[0], mock.lastCombo[1])
 	}
-	fmt.Println("[TEST] KeyCombo message processing passed")
+	t.Log("[TEST] KeyCombo message processing passed")
 }
 func TestBluetoothMessageParsingError(t *testing.T) {
 	mock := &MockSimulator{}
@@ -280,7 +279,7 @@ func TestBluetoothMessageParsingError(t *testing.T) {
 	processBluetoothData(invalidData)
 	processBluetoothData([]byte(""))
 	processBluetoothData([]byte("random string data"))
-	fmt.Println("[TEST] Invalid message handling passed")
+	t.Log("[TEST] Invalid message handling passed")
 }
 func TestConcurrentBluetoothConnections(t *testing.T) {
 	mock := &MockSimulator{}
@@ -306,7 +305,7 @@ func TestConcurrentBluetoothConnections(t *testing.T) {
 	for i := 0; i < numConnections; i++ {
 		<-done
 	}
-	fmt.Printf("[TEST] Concurrent connections test (%d clients) passed\n", numConnections)
+	t.Logf("[TEST] Concurrent connections test (%d clients) passed\n", numConnections)
 }
 func TestBluetoothDataStream(t *testing.T) {
 	mock := &MockSimulator{}
@@ -333,7 +332,7 @@ func TestBluetoothDataStream(t *testing.T) {
 	if mock.lastKey != "escape" {
 		t.Errorf("Stream processing failed: last key should be 'escape'")
 	}
-	fmt.Println("[TEST] Data stream processing passed")
+	t.Log("[TEST] Data stream processing passed")
 }
 func TestBluetoothConnectionTimeout(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -353,7 +352,7 @@ func TestBluetoothConnectionTimeout(t *testing.T) {
 		if err != nil && err != io.EOF {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			} else {
-				fmt.Printf("Unexpected error: %v\n", err)
+				logger.Printf("Unexpected error: %v\n", err)
 			}
 		}
 	}()
@@ -363,7 +362,7 @@ func TestBluetoothConnectionTimeout(t *testing.T) {
 	}
 	defer conn.Close()
 	time.Sleep(200 * time.Millisecond)
-	fmt.Println("[TEST] Connection timeout handling passed")
+	t.Log("[TEST] Connection timeout handling passed")
 }
 func TestBluetoothSpecialCharacters(t *testing.T) {
 	mock := &MockSimulator{}
@@ -390,7 +389,7 @@ func TestBluetoothSpecialCharacters(t *testing.T) {
 			t.Errorf("Special character handling failed for %q: got %q", text, mock.lastType)
 		}
 	}
-	fmt.Println("[TEST] Special character handling passed")
+	t.Log("[TEST] Special character handling passed")
 }
 func TestBluetoothMultipleKeys(t *testing.T) {
 	mock := &MockSimulator{}
@@ -411,7 +410,7 @@ func TestBluetoothMultipleKeys(t *testing.T) {
 			t.Errorf("Key command failed for %q: got %q", key, mock.lastKey)
 		}
 	}
-	fmt.Println("[TEST] Multiple key processing passed")
+	t.Log("[TEST] Multiple key processing passed")
 }
 func BenchmarkBluetoothMessageProcessing(b *testing.B) {
 	mock := &MockSimulator{}
@@ -432,7 +431,7 @@ func BenchmarkBluetoothMessageProcessing(b *testing.B) {
 	}
 	b.StopTimer()
 	latencyPerOp := b.Elapsed().Milliseconds() / int64(b.N)
-	fmt.Printf("[BENCH] Latency per operation: %.2f ms\n", float64(latencyPerOp))
+	b.Logf("[BENCH] Latency per operation: %.2f ms\n", float64(latencyPerOp))
 }
 func sendBluetoothMessage(conn net.Conn, msg ClientMessage) error {
 	data, err := json.Marshal(msg)
@@ -498,5 +497,5 @@ func TestBluetoothFullMessageCycle(t *testing.T) {
 	if mock.lastMove[0] != 25.0 || mock.lastMove[1] != 35.0 {
 		t.Errorf("Full cycle failed: got (%f, %f), want (25.0, 35.0)", mock.lastMove[0], mock.lastMove[1])
 	}
-	fmt.Println("[TEST] Full message cycle passed")
+	t.Log("[TEST] Full message cycle passed")
 }

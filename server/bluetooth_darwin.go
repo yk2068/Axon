@@ -5,7 +5,6 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 
 	"net"
 	"sync"
@@ -19,27 +18,27 @@ var (
 )
 
 func startBluetoothServer() {
-	fmt.Println("[BT] Starting native RFCOMM server on macOS")
+	logger.Println("[BT] Starting native RFCOMM server on macOS")
 	go startNativeRFCOMMServer()
 }
 func startNativeRFCOMMServer() {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		fmt.Printf("[BT] Error creating RFCOMM listener: %v\n", err)
+		logger.Printf("[BT] Error creating RFCOMM listener: %v\n", err)
 		return
 	}
 	defer listener.Close()
 	bluetoothListenerDarwin = listener
-	fmt.Printf("[BT] RFCOMM server listening on %s (macOS native)\n", listener.Addr().String())
+	logger.Printf("[BT] RFCOMM server listening on %s (macOS native)\n", listener.Addr().String())
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Printf("[BT] Error accepting connection: %v\n", err)
+			logger.Printf("[BT] Error accepting connection: %v\n", err)
 			continue
 		}
 		if tcpConn, ok := conn.(*net.TCPConn); ok {
 			remoteAddr := tcpConn.RemoteAddr().String()
-			fmt.Printf("[CONNECTION] Bluetooth client connected from: %s\n", remoteAddr)
+			logger.Printf("[CONNECTION] Bluetooth client connected from: %s\n", remoteAddr)
 			tcpConn.SetNoDelay(true)
 			tcpConn.SetKeepAlive(true)
 			tcpConn.SetKeepAlivePeriod(1 * time.Second)
@@ -58,7 +57,7 @@ func handleBluetoothConnection(conn net.Conn) {
 		bluetoothConnMutex.Lock()
 		delete(bluetoothConnections, conn)
 		bluetoothConnMutex.Unlock()
-		fmt.Println("[DISCONNECTION] Bluetooth client disconnected")
+		logger.Println("[DISCONNECTION] Bluetooth client disconnected")
 	}()
 
 	scanner := bufio.NewScanner(conn)
@@ -71,7 +70,7 @@ func handleBluetoothConnection(conn net.Conn) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		fmt.Printf("[BT] Read error: %v\n", err)
+		logger.Printf("[BT] Read error: %v\n", err)
 	}
 }
 func processBluetoothData(data []byte) {
@@ -97,13 +96,13 @@ func processBluetoothData(data []byte) {
 		}
 		simulator.Scroll(dir)
 	case "type":
-		fmt.Printf("[BT KEYBOARD] Typing text: %q\n", msg.Text)
+		logger.Printf("[BT KEYBOARD] Typing text: %q\n", msg.Text)
 		simulator.Type(msg.Text)
 	case "key":
-		fmt.Printf("[BT KEYBOARD] Pressing special key: %q\n", msg.Key)
+		logger.Printf("[BT KEYBOARD] Pressing special key: %q\n", msg.Key)
 		simulator.Key(msg.Key)
 	case "keycombo":
-		fmt.Printf("[BT KEYBOARD] Pressing combo: %s+%s\n", msg.Modifier, msg.Key)
+		logger.Printf("[BT KEYBOARD] Pressing combo: %s+%s\n", msg.Modifier, msg.Key)
 		simulator.KeyCombo(msg.Modifier, msg.Key)
 	}
 }

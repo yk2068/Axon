@@ -5,7 +5,6 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"golang.org/x/sys/unix"
 	"os"
 )
@@ -13,7 +12,7 @@ import (
 func startBluetoothServer() {
 	fd, err := unix.Socket(unix.AF_BLUETOOTH, unix.SOCK_STREAM, unix.BTPROTO_RFCOMM)
 	if err != nil {
-		fmt.Println("Error creating Bluetooth socket:", err)
+		logger.Println("Error creating Bluetooth socket:", err)
 		return
 	}
 	defer unix.Close(fd)
@@ -22,22 +21,22 @@ func startBluetoothServer() {
 		Addr:    [6]uint8{0, 0, 0, 0, 0, 0},
 	}
 	if err := unix.Bind(fd, addr); err != nil {
-		fmt.Println("Error binding to Bluetooth (maybe another service is using channel 1):", err)
+		logger.Println("Error binding to Bluetooth (maybe another service is using channel 1):", err)
 		return
 	}
 	if err := unix.Listen(fd, 1); err != nil {
-		fmt.Println("Error listening on Bluetooth:", err)
+		logger.Println("Error listening on Bluetooth:", err)
 		return
 	}
-	fmt.Println("RFCOMM Bluetooth server listening on channel 1")
+	logger.Println("RFCOMM Bluetooth server listening on channel 1")
 	for {
 		clientFd, sa, err := unix.Accept(fd)
 		if err != nil {
-			fmt.Println("Error accepting Bluetooth connection:", err)
+			logger.Println("Error accepting Bluetooth connection:", err)
 			continue
 		}
 		if btAddr, ok := sa.(*unix.SockaddrRFCOMM); ok {
-			fmt.Printf("[CONNECTION] Bluetooth client connected from MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+			logger.Printf("[CONNECTION] Bluetooth client connected from MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
 				btAddr.Addr[5], btAddr.Addr[4], btAddr.Addr[3], btAddr.Addr[2], btAddr.Addr[1], btAddr.Addr[0])
 		}
 		go handleBluetoothConnection(clientFd)
@@ -52,9 +51,9 @@ func handleBluetoothConnection(fd int) {
 		processBluetoothData([]byte(text))
 	}
 	if err := scanner.Err(); err != nil {
-		fmt.Println("[DISCONNECTION] Bluetooth client error:", err)
+		logger.Println("[DISCONNECTION] Bluetooth client error:", err)
 	} else {
-		fmt.Println("[DISCONNECTION] Bluetooth client disconnected")
+		logger.Println("[DISCONNECTION] Bluetooth client disconnected")
 	}
 }
 func processBluetoothData(data []byte) {
@@ -80,13 +79,13 @@ func processBluetoothData(data []byte) {
 		}
 		simulator.Scroll(dir)
 	case "type":
-		fmt.Printf("[BT KEYBOARD] Typing text: %q\n", msg.Text)
+		logger.Printf("[BT KEYBOARD] Typing text: %q\n", msg.Text)
 		simulator.Type(msg.Text)
 	case "key":
-		fmt.Printf("[BT KEYBOARD] Pressing special key: %q\n", msg.Key)
+		logger.Printf("[BT KEYBOARD] Pressing special key: %q\n", msg.Key)
 		simulator.Key(msg.Key)
 	case "keycombo":
-		fmt.Printf("[BT KEYBOARD] Pressing combo: %s+%s\n", msg.Modifier, msg.Key)
+		logger.Printf("[BT KEYBOARD] Pressing combo: %s+%s\n", msg.Modifier, msg.Key)
 		simulator.KeyCombo(msg.Modifier, msg.Key)
 	}
 }
