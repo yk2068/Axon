@@ -4,6 +4,13 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/) y este proyecto sigue el [Versionado Semántico](https://semver.org/lang/es/).
 
+
+## [1.6.6] - 2026-08-23
+
+### 🚀 Añadido / Mejorado
+- Cumplimiento de estándares de código de Alenia Studios (Código Limpio).
+- Actualización de versión interna en Go y Android.
+
 ## [1.6.3] - 2026-06-29
 
 ### ✔️ Corregido

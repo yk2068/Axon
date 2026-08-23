@@ -426,7 +426,7 @@ func main() {
 	flag.IntVar(&udpPort, "udp-port", 6970, "UDP port for fast input protocol (0 for auto-allocation)")
 	flag.Parse()
 	if *showVersion {
-		fmt.Println("Axon Server v1.0.0")
+		fmt.Println("Axon Server v1.6.6")
 		fmt.Println("High-speed wireless input bridge")
 		os.Exit(0)
 	}
