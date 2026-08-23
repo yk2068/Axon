@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="Axon Logo" width="600">
+
 
 # Axon
 
