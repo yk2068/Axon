@@ -18,6 +18,8 @@ Una herramienta de entrada remota de código abierto y ultra baja latencia cread
 
 </div>
 
+*Lee esto en otros idiomas: [English](../README.md)*
+
 ---
 
 ## Descripción General y Características Principales
