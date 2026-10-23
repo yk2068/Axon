@@ -409,10 +409,12 @@ func (s *LinuxSimulator) MouseUp(button string) {
 	}
 	s.Send(fmt.Sprintf("mouseup %s", btn))
 }
-func (s *LinuxSimulator) Scroll(direction string) {
-	if direction == "up" {
+func (s *LinuxSimulator) ScrollDelta(delta float64) {
+	n := int(delta)
+	for i := 0; i < n && i < 20; i++ {
 		s.Send("click 4")
-	} else {
+	}
+	for i := 0; i < -n && i < 20; i++ {
 		s.Send("click 5")
 	}
 }

@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.axon"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.6.11-touchpad"
+        versionCode = 7
+        versionName = "1.6.12-touchpad"
     }
 
     signingConfigs {

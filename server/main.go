@@ -291,11 +291,7 @@ func handleMessages(conn *websocket.Conn) {
 		case "mouseup":
 			simulator.MouseUp(msg.Button)
 		case "scroll":
-			dir := "down"
-			if msg.Dy > 0 {
-				dir = "up"
-			}
-			simulator.Scroll(dir)
+			simulator.ScrollDelta(msg.Dy)
 		case "type":
 			simulator.Type(msg.Text)
 		case "key":
@@ -331,11 +327,7 @@ func startUDPServer(conn *net.UDPConn) {
 		case 0:
 			simulator.MoveMouse(float64(dx), float64(dy))
 		case 1:
-			dir := "down"
-			if dx > 0 {
-				dir = "up"
-			}
-			simulator.Scroll(dir)
+			simulator.ScrollDelta(float64(dx))
 		}
 	}
 }

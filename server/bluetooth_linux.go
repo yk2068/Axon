@@ -73,11 +73,7 @@ func processBluetoothData(data []byte) {
 	case "mouseup":
 		simulator.MouseUp(msg.Button)
 	case "scroll":
-		dir := "down"
-		if msg.Dy > 0 {
-			dir = "up"
-		}
-		simulator.Scroll(dir)
+		simulator.ScrollDelta(msg.Dy)
 	case "type":
 		logger.Printf("[BT KEYBOARD] Typing text: %q\n", msg.Text)
 		simulator.Type(msg.Text)

@@ -98,10 +98,14 @@ func (s *DarwinSimulator) MouseUp(button string) {
 	s.Send("mup")
 }
 
-func (s *DarwinSimulator) Scroll(direction string) {
-	if direction == "up" {
+// ScrollDelta turns delta notches into discrete scroll commands; the backend
+// here has no sub-notch granularity, so anything under one notch is dropped.
+func (s *DarwinSimulator) ScrollDelta(delta float64) {
+	n := int(delta)
+	for i := 0; i < n && i < 20; i++ {
 		s.Send("scrollup")
-	} else {
+	}
+	for i := 0; i < -n && i < 20; i++ {
 		s.Send("scrolldown")
 	}
 }

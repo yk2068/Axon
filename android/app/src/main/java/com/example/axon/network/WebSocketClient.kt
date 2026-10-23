@@ -17,6 +17,7 @@ class WebSocketClient(private val listener: WebSocketConnectionListener) : Input
         .writeTimeout(0, TimeUnit.MILLISECONDS)
         .build()
     private var webSocket: WebSocket? = null
+    private var generation = 0
     interface WebSocketConnectionListener {
         fun onConnected()
         fun onDisconnected()
@@ -28,10 +29,15 @@ class WebSocketClient(private val listener: WebSocketConnectionListener) : Input
         } catch (e: Exception) {
             serverIp = ""
         }
+        // A reconnect replaces the socket instead of stacking on top of it. Bumping the
+        // generation makes every callback of an older socket a no-op, so a late failure
+        // from a dead connection can no longer tear down the new one.
+        val gen = ++generation
+        webSocket?.cancel()
         val request = Request.Builder().url(url).build()
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                listener.onConnected()
+                if (gen == generation) listener.onConnected()
             }
             override fun onMessage(webSocket: WebSocket, text: String) {
                 try {
@@ -47,14 +53,15 @@ class WebSocketClient(private val listener: WebSocketConnectionListener) : Input
                 }
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                listener.onDisconnected()
+                if (gen == generation) listener.onDisconnected()
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                listener.onError(t.message ?: "Connection Failure")
+                if (gen == generation) listener.onError(t.message ?: "Connection Failure")
             }
         })
     }
     override fun disconnect() {
+        generation++
         webSocket?.close(1000, "Normal Close")
         webSocket = null
         try {

@@ -40,9 +40,10 @@ var (
 )
 
 type WindowsSimulator struct {
-	mu   sync.Mutex
-	accX float64
-	accY float64
+	mu        sync.Mutex
+	accX      float64
+	accY      float64
+	scrollAcc float64
 }
 
 func initSimulator() InputSimulator {
@@ -105,12 +106,23 @@ func (s *WindowsSimulator) MouseUp(button string) {
 		s.sendMouseInput(0x0004, 0, 0, 0)
 	}
 }
-func (s *WindowsSimulator) Scroll(direction string) {
-	var data uint32 = 120
-	if direction == "down" {
-		data = 4294967176
+// ScrollDelta rotates the wheel by delta notches, where 1.0 is one detent
+// (WHEEL_DELTA). Fractional values are pushed through as sub-notch deltas —
+// the same thing a precision touchpad reports — so applications scroll a
+// fraction of a line per event and the motion glides instead of stepping.
+func (s *WindowsSimulator) ScrollDelta(delta float64) {
+	if delta == 0 {
+		return
 	}
-	s.sendMouseInput(0x0800, 0, 0, data)
+	s.mu.Lock()
+	s.scrollAcc += delta * 120
+	steps := int32(s.scrollAcc)
+	s.scrollAcc -= float64(steps)
+	s.mu.Unlock()
+	if steps == 0 {
+		return
+	}
+	s.sendMouseInput(0x0800, 0, 0, uint32(steps))
 }
 func (s *WindowsSimulator) Type(text string) {
 	for _, r := range text {

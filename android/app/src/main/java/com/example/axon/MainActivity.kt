@@ -3,8 +3,9 @@ package com.example.axon
 import android.content.Context
 import android.net.wifi.WifiManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -41,14 +42,21 @@ enum class AppScreen {
 /**
  * Single-purpose activity: reopen the last session (or scan a QR code), then act as a touchpad.
  *
- * The last connection URL, token included, is persisted so relaunching reconnects without
- * rescanning; the scanner only appears when nothing has been saved or the saved host is gone.
+ * The connection URL, token included, is persisted. Every return to the foreground forces a
+ * fresh socket — a socket that spent time in the background is usually half open while still
+ * looking alive, which is why input silently went nowhere. Drops are retried quietly in the
+ * background; nothing is ever surfaced as a dialog or toast.
  */
 class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionListener {
 
     private companion object {
         const val PREFS = "axon_prefs"
         const val KEY_LAST_URL = "last_url"
+
+        /** Quiet retries before the scanner is shown again. */
+        const val MAX_RETRIES = 6
+        const val FIRST_RETRY_MS = 300L
+        const val MAX_RETRY_MS = 3000L
     }
 
     private var webSocketClient: WebSocketClient? = null
@@ -56,7 +64,12 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
     private var autoConnecting by mutableStateOf(false)
     private var manualDisconnect = false
     private var connected = false
-    private var wentToBackground = false
+    private var foreground = false
+    private var retries = 0
+    private var firstStart = true
+
+    private val handler = Handler(Looper.getMainLooper())
+    private val retryTick = Runnable { retry() }
 
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -90,6 +103,7 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
                                             manualDisconnect = true
                                             connected = false
                                             autoConnecting = false
+                                            handler.removeCallbacks(retryTick)
                                             client.disconnect()
                                             releaseKeepAlive()
                                             currentScreen = AppScreen.Scan
@@ -103,40 +117,50 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
             }
         }
 
-        val saved = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        savedUrl()?.let { beginSession(it, auto = true) }
+    }
+
+    private fun savedUrl(): String? {
+        val url = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_LAST_URL, null)
-        if (!saved.isNullOrBlank()) {
-            beginSession(saved, auto = true)
-        }
+        return if (url.isNullOrBlank()) null else url
     }
 
     private fun beginSession(url: String, auto: Boolean) {
         manualDisconnect = false
-        autoConnecting = auto
+        retries = 0
+        autoConnecting = auto && currentScreen == AppScreen.Scan
         getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_LAST_URL, url).apply()
         webSocketClient?.connect(toWebSocketUrl(url))
     }
 
     /**
-     * Coming back from the background (unlocking the screen, switching apps) is the moment
-     * the socket is most likely to be gone, so retry the saved session once on re-entry.
+     * Every return to the foreground drops the old socket and opens a new one, without
+     * touching what is on screen: the touchpad stays visible and starts working again as
+     * soon as the handshake lands.
      */
     override fun onStart() {
         super.onStart()
-        if (!wentToBackground) return
-        wentToBackground = false
-        if (manualDisconnect || autoConnecting || connected) return
-        val saved = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_LAST_URL, null)
-        if (!saved.isNullOrBlank()) {
-            beginSession(saved, auto = true)
+        foreground = true
+        // The very first onStart follows onCreate, which already opened the session.
+        if (firstStart) {
+            firstStart = false
+            return
         }
+        if (manualDisconnect) return
+        val saved = savedUrl() ?: return
+        connected = false
+        handler.removeCallbacks(retryTick)
+        retries = 0
+        autoConnecting = currentScreen == AppScreen.Scan
+        webSocketClient?.connect(toWebSocketUrl(saved))
     }
 
     override fun onStop() {
         super.onStop()
-        wentToBackground = true
+        foreground = false
+        handler.removeCallbacks(retryTick)
     }
 
     private fun toWebSocketUrl(url: String): String = try {
@@ -150,6 +174,8 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
     override fun onConnected() {
         runOnUiThread {
             if (manualDisconnect) return@runOnUiThread
+            handler.removeCallbacks(retryTick)
+            retries = 0
             connected = true
             autoConnecting = false
             acquireKeepAlive()
@@ -158,22 +184,40 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
     }
 
     override fun onDisconnected() {
-        runOnUiThread { leaveSession() }
+        runOnUiThread { handleDrop() }
     }
 
     override fun onError(message: String) {
-        runOnUiThread { leaveSession(message) }
+        // Deliberately unused: a failed socket is retried silently, never reported.
+        runOnUiThread { handleDrop() }
     }
 
-    private fun leaveSession(message: String? = null) {
-        if (manualDisconnect) return
+    /**
+     * A dropped socket is retried in place. The scanner only comes back when the retry
+     * budget is spent, so a brief hiccup never throws the user out of the touchpad.
+     */
+    private fun handleDrop() {
         connected = false
-        autoConnecting = false
-        releaseKeepAlive()
-        currentScreen = AppScreen.Scan
-        if (!message.isNullOrBlank()) {
-            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        if (manualDisconnect || !foreground) return
+        retry()
+    }
+
+    private fun retry() {
+        if (manualDisconnect || !foreground || connected) return
+        val saved = savedUrl()
+        if (saved == null || retries >= MAX_RETRIES) {
+            if (saved != null) {
+                // Give up quietly and fall back to the scanner.
+                autoConnecting = false
+                currentScreen = AppScreen.Scan
+            }
+            return
         }
+        retries++
+        webSocketClient?.connect(toWebSocketUrl(saved))
+        val backoff = (FIRST_RETRY_MS shl (retries - 1)).coerceAtMost(MAX_RETRY_MS)
+        handler.removeCallbacks(retryTick)
+        handler.postDelayed(retryTick, backoff)
     }
 
     private fun acquireKeepAlive() {
@@ -211,6 +255,7 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
     override fun onDestroy() {
         super.onDestroy()
         manualDisconnect = true
+        handler.removeCallbacks(retryTick)
         releaseKeepAlive()
         webSocketClient?.disconnect()
     }

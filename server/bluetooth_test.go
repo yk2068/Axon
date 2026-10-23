@@ -33,8 +33,12 @@ func (m *MockSimulator) MouseDown(button string) {
 func (m *MockSimulator) MouseUp(button string) {
 	m.lastMouseUp = button
 }
-func (m *MockSimulator) Scroll(direction string) {
-	m.lastScroll = direction
+func (m *MockSimulator) ScrollDelta(delta float64) {
+	if delta > 0 {
+		m.lastScroll = "up"
+	} else if delta < 0 {
+		m.lastScroll = "down"
+	}
 }
 func (m *MockSimulator) Type(text string) {
 	m.lastType = text

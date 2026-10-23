@@ -14,11 +14,7 @@ func dispatchCommand(msg ClientMessage) {
 	case "mouseup":
 		simulator.MouseUp(msg.Button)
 	case "scroll":
-		dir := "down"
-		if msg.Dy > 0 {
-			dir = "up"
-		}
-		simulator.Scroll(dir)
+		simulator.ScrollDelta(msg.Dy)
 	case "type":
 		simulator.Type(msg.Text)
 	case "key":

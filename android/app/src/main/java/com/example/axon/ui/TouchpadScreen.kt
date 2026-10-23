@@ -80,6 +80,15 @@ private const val KEY_INVERT_SCROLL = "invert_scroll"
 /** Finger travel, in dp, that produces one wheel notch at 1x sensitivity. */
 private const val SCROLL_PX_PER_NOTCH_AT_1X = 40f
 
+/** Scroll release tick: how often a slice of the pending travel is handed to the link. */
+private const val SCROLL_TICK_MS = 10L
+
+/** Fraction of the pending travel released per tick, which evens out finger jitter. */
+private const val SCROLL_RELEASE = 0.45f
+
+/** Below this many notches the remainder is flushed at once instead of dribbled. */
+private const val SCROLL_MIN_NOTCH = 0.01f
+
 /** Minimum gap between move packets: 8ms keeps motion at ~120Hz without flooding the link. */
 private const val MIN_SEND_INTERVAL_MS = 8L
 
@@ -114,13 +123,33 @@ fun TouchpadScreen(
 
     val accDx = remember { java.util.concurrent.atomic.AtomicLong(0L) }
     val accDy = remember { java.util.concurrent.atomic.AtomicLong(0L) }
-    val lastScrollTime = remember { java.util.concurrent.atomic.AtomicLong(0L) }
-    val scrollThrottleMs = 12L
+    val pendingNotches = remember { java.util.concurrent.atomic.AtomicReference(0f) }
     val sendMove = { dx: Double, dy: Double ->
         if (!useUdp || udpClient == null) client.sendMove(dx, dy) else udpClient.sendMove(dx, dy)
     }
     val sendScroll = { dy: Double ->
         if (!useUdp || udpClient == null) client.sendScroll(dy) else udpClient.sendScroll(dy)
+    }
+    // Scroll is fed as fractional notches (1.0 == one wheel notch) several times per
+    // frame instead of whole notches on a 12ms timer, so the far end can emit sub-notch
+    // wheel deltas and the content glides. The pending travel is released with a
+    // leaky integrator: each tick hands over a fixed share of what is owed, which
+    // spreads a fast flick over the following frames while keeping the total distance
+    // exactly equal to the finger travel.
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(SCROLL_TICK_MS)
+            val owed = pendingNotches.get()
+            if (owed == 0f) continue
+            if (abs(owed) < SCROLL_MIN_NOTCH) {
+                pendingNotches.set(0f)
+                sendScroll(owed.toDouble())
+            } else {
+                val released = owed * SCROLL_RELEASE
+                pendingNotches.set(owed - released)
+                sendScroll(released.toDouble())
+            }
+        }
     }
     val dragChannel = remember {
         Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -315,7 +344,6 @@ fun TouchpadScreen(
                 Spacer(modifier = Modifier.width(8.dp))
 
                 // ---- scroll strip: speed follows the sensitivity slider ----
-                val scrollAcc = remember { java.util.concurrent.atomic.AtomicReference(0f) }
                 Box(
                     modifier = Modifier
                         .width(scrollWidthDp.dp)
@@ -326,7 +354,7 @@ fun TouchpadScreen(
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false)
-                                scrollAcc.set(0f)
+                                pendingNotches.set(0f)
                                 var scrollPointerId = down.id
                                 while (true) {
                                     val event = awaitPointerEvent()
@@ -344,20 +372,8 @@ fun TouchpadScreen(
                                         // so the same swipe scrolls proportionally further.
                                         val pxPerNotch = (SCROLL_PX_PER_NOTCH_AT_1X / sensitivity)
                                             .coerceIn(6f, 60f)
-                                        val acc = scrollAcc.get() + dragAmount.y
-                                        scrollAcc.set(acc)
-                                        if (abs(acc) >= pxPerNotch) {
-                                            val now = System.currentTimeMillis()
-                                            val last = lastScrollTime.get()
-                                            if (now - last >= scrollThrottleMs) {
-                                                if (lastScrollTime.compareAndSet(last, now)) {
-                                                    val dir = if (acc > 0) 1.0 else -1.0
-                                                    val notches = (abs(acc) / pxPerNotch).toInt().coerceIn(1, 4)
-                                                    repeat(notches) { sendScroll(dir * sign) }
-                                                    scrollAcc.set(acc - dir.toFloat() * pxPerNotch * notches)
-                                                }
-                                            }
-                                        }
+                                        val prev = pendingNotches.get()
+                                        pendingNotches.set(prev + dragAmount.y * sign / pxPerNotch)
                                     }
                                 }
                             }

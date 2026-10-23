@@ -5,7 +5,7 @@ type InputSimulator interface {
 	Click(button string)
 	MouseDown(button string)
 	MouseUp(button string)
-	Scroll(direction string)
+	ScrollDelta(delta float64)
 	Type(text string)
 	Key(key string)
 	KeyCombo(modifier, key string)
