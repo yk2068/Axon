@@ -75,6 +75,9 @@ private const val DEFAULT_SENSITIVITY = 2.2f
 /** Finger travel, in dp, that produces one wheel notch at 1x sensitivity. */
 private const val SCROLL_PX_PER_NOTCH_AT_1X = 40f
 
+/** Minimum gap between move packets: 8ms keeps motion at ~120Hz without flooding the link. */
+private const val MIN_SEND_INTERVAL_MS = 8L
+
 @Composable
 fun TouchpadScreen(
     client: InputClient,
@@ -101,7 +104,7 @@ fun TouchpadScreen(
     val accDx = remember { java.util.concurrent.atomic.AtomicLong(0L) }
     val accDy = remember { java.util.concurrent.atomic.AtomicLong(0L) }
     val lastScrollTime = remember { java.util.concurrent.atomic.AtomicLong(0L) }
-    val scrollThrottleMs = 20L
+    val scrollThrottleMs = 12L
     val sendMove = { dx: Double, dy: Double ->
         if (!useUdp || udpClient == null) client.sendMove(dx, dy) else udpClient.sendMove(dx, dy)
     }
@@ -112,11 +115,16 @@ fun TouchpadScreen(
         Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     }
     LaunchedEffect(dragChannel) {
+        var lastSend = 0L
         for (signal in dragChannel) {
+            // Time-based throttle: wait only for what is left of the frame budget instead
+            // of sleeping a fixed 16ms after every send, which added latency on each move.
+            val wait = MIN_SEND_INTERVAL_MS - (android.os.SystemClock.uptimeMillis() - lastSend)
+            if (wait > 0) kotlinx.coroutines.delay(wait)
+            lastSend = android.os.SystemClock.uptimeMillis()
             val dx = java.lang.Double.longBitsToDouble(accDx.getAndSet(0L))
             val dy = java.lang.Double.longBitsToDouble(accDy.getAndSet(0L))
             if (dx != 0.0 || dy != 0.0) sendMove(dx, dy)
-            kotlinx.coroutines.delay(16)
         }
     }
 

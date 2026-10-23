@@ -3,6 +3,7 @@
 package main
 
 import (
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -38,7 +39,11 @@ var (
 	procSendInput = user32.NewProc("SendInput")
 )
 
-type WindowsSimulator struct{}
+type WindowsSimulator struct {
+	mu   sync.Mutex
+	accX float64
+	accY float64
+}
 
 func initSimulator() InputSimulator {
 	return &WindowsSimulator{}
@@ -60,8 +65,22 @@ func (s *WindowsSimulator) sendKeyboardInput(dwFlags uint32, wVk, wScan uint16) 
 	input.Ki.WScan = wScan
 	procSendInput.Call(1, uintptr(unsafe.Pointer(&input)), uintptr(unsafe.Sizeof(input)))
 }
+// MoveMouse applies a relative move. Deltas are accumulated so sub-pixel motion is
+// not truncated away — without this the cursor sticks and then jumps when the finger
+// moves slowly.
 func (s *WindowsSimulator) MoveMouse(dx, dy float64) {
-	s.sendMouseInput(0x0001, int32(dx), int32(dy), 0)
+	s.mu.Lock()
+	s.accX += dx
+	s.accY += dy
+	ix := int32(s.accX)
+	iy := int32(s.accY)
+	s.accX -= float64(ix)
+	s.accY -= float64(iy)
+	s.mu.Unlock()
+	if ix == 0 && iy == 0 {
+		return
+	}
+	s.sendMouseInput(0x0001, ix, iy, 0)
 }
 func (s *WindowsSimulator) Click(button string) {
 	s.MouseDown(button)

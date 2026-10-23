@@ -12,7 +12,9 @@ class UdpClient(
     private val port: Int = 6970
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
-    private val channel = Channel<ByteArray>(Channel.CONFLATED)
+    // Buffered, not conflated: a conflated channel silently replaced a pending move
+    // packet, so the movement it carried was lost and the cursor fell behind the finger.
+    private val channel = Channel<ByteArray>(capacity = 32)
     init {
         scope.launch {
             try {

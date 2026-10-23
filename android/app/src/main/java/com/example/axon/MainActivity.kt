@@ -55,6 +55,8 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
     private var currentScreen by mutableStateOf(AppScreen.Scan)
     private var autoConnecting by mutableStateOf(false)
     private var manualDisconnect = false
+    private var connected = false
+    private var wentToBackground = false
 
     private var wifiLock: WifiManager.WifiLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -86,6 +88,8 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
                                         client = client,
                                         onDisconnect = {
                                             manualDisconnect = true
+                                            connected = false
+                                            autoConnecting = false
                                             client.disconnect()
                                             releaseKeepAlive()
                                             currentScreen = AppScreen.Scan
@@ -114,6 +118,27 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
         webSocketClient?.connect(toWebSocketUrl(url))
     }
 
+    /**
+     * Coming back from the background (unlocking the screen, switching apps) is the moment
+     * the socket is most likely to be gone, so retry the saved session once on re-entry.
+     */
+    override fun onStart() {
+        super.onStart()
+        if (!wentToBackground) return
+        wentToBackground = false
+        if (manualDisconnect || autoConnecting || connected) return
+        val saved = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_LAST_URL, null)
+        if (!saved.isNullOrBlank()) {
+            beginSession(saved, auto = true)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        wentToBackground = true
+    }
+
     private fun toWebSocketUrl(url: String): String = try {
         val uri = java.net.URI(url)
         val query = if (uri.rawQuery != null) "?${uri.rawQuery}" else ""
@@ -125,6 +150,7 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
     override fun onConnected() {
         runOnUiThread {
             if (manualDisconnect) return@runOnUiThread
+            connected = true
             autoConnecting = false
             acquireKeepAlive()
             currentScreen = AppScreen.Control
@@ -141,6 +167,7 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
 
     private fun leaveSession(message: String? = null) {
         if (manualDisconnect) return
+        connected = false
         autoConnecting = false
         releaseKeepAlive()
         currentScreen = AppScreen.Scan
