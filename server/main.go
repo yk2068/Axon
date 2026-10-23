@@ -72,7 +72,7 @@ func getLocalIP() string {
 			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
 				continue
 			}
-			if !strings.HasPrefix(iface.Name, prefix) {
+			if !strings.HasPrefix(strings.ToLower(iface.Name), prefix) {
 				continue
 			}
 			addrs, err := iface.Addrs()
@@ -92,7 +92,7 @@ func getLocalIP() string {
 	}
 	for _, address := range addrs {
 		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
+			if ipnet.IP.To4() != nil && !ipnet.IP.IsLinkLocalUnicast() {
 				return ipnet.IP.String()
 			}
 		}
@@ -424,6 +424,8 @@ func main() {
 	noLogo := flag.Bool("no-logo", false, "Skip the decorative logo (use if your terminal font lacks braille support)")
 	flag.IntVar(&port, "port", 6969, "TCP/WebSocket port to listen on (0 for auto-allocation)")
 	flag.IntVar(&udpPort, "udp-port", 6970, "UDP port for fast input protocol (0 for auto-allocation)")
+	hostOverride := flag.String("host", "", "Override the advertised local IP address")
+	tokenOverride := flag.String("token", "", "Use a fixed auth token instead of a random one")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println("Axon Server v1.6.6")
@@ -463,7 +465,13 @@ func main() {
 		udpPort = actualUdpPort
 	}
 	activeToken = generateToken()
+	if *tokenOverride != "" {
+		activeToken = *tokenOverride
+	}
 	addr := fmt.Sprintf("%s:%d", ip, port)
+	if *hostOverride != "" {
+		addr = fmt.Sprintf("%s:%d", *hostOverride, port)
+	}
 	url := fmt.Sprintf("http://%s/?token=%s&udp=%d", addr, activeToken, udpPort)
 	lineDelay := 55 * time.Millisecond
 	printLine(colorizeRainbow("    ___  _  ______  _  __", 0.4), lineDelay)

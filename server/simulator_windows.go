@@ -26,7 +26,6 @@ type KeyboardInput struct {
 type InputUnion struct {
 	Type uint32
 	Mi   MouseInput
-	Pad  [8]byte
 }
 type InputKeyboardStruct struct {
 	Type uint32
