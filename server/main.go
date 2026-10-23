@@ -229,7 +229,6 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	activeClientIP = ip
 	activeClientNetIP = net.ParseIP(ip)
 	activeClientMu.Unlock()
-	logger.Printf("[CONNECTION] Client connected from: %s\n", remoteAddrStr)
 	done := make(chan bool)
 	defer func() {
 		close(done)
@@ -239,7 +238,6 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			activeClientNetIP = nil
 		}
 		activeClientMu.Unlock()
-		logger.Println("[DISCONNECTION] Client disconnected")
 	}()
 	go startPingLoop(conn, done)
 	handleMessages(conn)
@@ -281,8 +279,6 @@ func handleMessages(conn *websocket.Conn) {
 			continue
 		}
 		if msg.Type == "pong" {
-			rtt := time.Now().UnixMilli() - msg.Timestamp
-			logger.Printf("[LATENCY] RTT Latency: %d ms\n", rtt)
 			continue
 		}
 		switch msg.Type {
@@ -301,13 +297,10 @@ func handleMessages(conn *websocket.Conn) {
 			}
 			simulator.Scroll(dir)
 		case "type":
-			logger.Printf("[KEYBOARD] Typing text: %q\n", msg.Text)
 			simulator.Type(msg.Text)
 		case "key":
-			logger.Printf("[KEYBOARD] Pressing special key: %q\n", msg.Key)
 			simulator.Key(msg.Key)
 		case "keycombo":
-			logger.Printf("[KEYBOARD] Pressing combo: %s+%s\n", msg.Modifier, msg.Key)
 			simulator.KeyCombo(msg.Modifier, msg.Key)
 		}
 	}

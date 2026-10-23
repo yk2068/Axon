@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -71,6 +73,9 @@ private val RedAccent = Color(0xFFEF4444)
 private const val PREFS = "axon_prefs"
 private const val KEY_SENSITIVITY = "sensitivity"
 private const val DEFAULT_SENSITIVITY = 2.2f
+private const val KEY_SCROLL_WIDTH = "scroll_width"
+private const val DEFAULT_SCROLL_WIDTH = 56f
+private const val KEY_INVERT_SCROLL = "invert_scroll"
 
 /** Finger travel, in dp, that produces one wheel notch at 1x sensitivity. */
 private const val SCROLL_PX_PER_NOTCH_AT_1X = 40f
@@ -87,6 +92,12 @@ fun TouchpadScreen(
     val prefs = remember { context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE) }
     var sensitivity by remember {
         mutableStateOf(prefs.getFloat(KEY_SENSITIVITY, DEFAULT_SENSITIVITY))
+    }
+    var scrollWidthDp by remember {
+        mutableStateOf(prefs.getFloat(KEY_SCROLL_WIDTH, DEFAULT_SCROLL_WIDTH))
+    }
+    var invertScroll by remember {
+        mutableStateOf(prefs.getBoolean(KEY_INVERT_SCROLL, false))
     }
     var showSettings by remember { mutableStateOf(false) }
 
@@ -144,43 +155,8 @@ fun TouchpadScreen(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(horizontal = 6.dp)
-                .padding(top = 2.dp, bottom = 6.dp)
+                .padding(top = 6.dp, bottom = 6.dp)
         ) {
-            // ---- slim header: keeps the settings toggle clear of both the status bar
-            //      and the scroll strip, so nothing overlaps ----
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(30.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .alpha(0.35f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { showSettings = !showSettings },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Canvas(modifier = Modifier.size(14.dp)) {
-                        val h = size.height
-                        val w = size.width
-                        val gaps = listOf(h * 0.15f, h * 0.5f, h * 0.85f)
-                        gaps.forEach { y ->
-                            drawLine(
-                                color = TextPrimary,
-                                start = Offset(0f, y),
-                                end = Offset(w, y),
-                                strokeWidth = 1.6.dp.toPx()
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(2.dp))
-
             Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 // ---- main touch surface ----
                 Box(
@@ -192,6 +168,7 @@ fun TouchpadScreen(
                         .border(1.dp, BorderColor, RoundedCornerShape(24.dp))
                         .pointerInput(isLocalConnection) {
                             var lastTapTime = 0L
+                            var lastTwoFingerTap = 0L
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false)
                                 val downTime = System.currentTimeMillis()
@@ -205,6 +182,8 @@ fun TouchpadScreen(
                                 var isDrag = false
                                 var totalDist = 0f
                                 var lastZoomDist: Float? = null
+                                var maxPointers = 1
+                                var twoFingerMoved = 0f
                                 while (true) {
                                     val event = awaitPointerEvent()
                                     val anyPressed = event.changes.any { it.pressed }
@@ -213,27 +192,44 @@ fun TouchpadScreen(
                                         val dx = java.lang.Double.longBitsToDouble(accDx.getAndSet(0L))
                                         val dy = java.lang.Double.longBitsToDouble(accDy.getAndSet(0L))
                                         if (dx != 0.0 || dy != 0.0) sendMove(dx, dy)
-                                        if (isDraggingClick) {
+                                        val duration = System.currentTimeMillis() - startTime
+                                        val twoFingerTap = maxPointers >= 2 && !isDrag &&
+                                            duration < 300 && twoFingerMoved < 40f
+                                        if (twoFingerTap) {
+                                            // Two-finger double tap opens / closes the settings panel;
+                                            // there is no on-screen button any more.
+                                            val now = System.currentTimeMillis()
+                                            if (now - lastTwoFingerTap < 500) {
+                                                showSettings = !showSettings
+                                                lastTwoFingerTap = 0L
+                                            } else {
+                                                lastTwoFingerTap = now
+                                            }
+                                        } else if (isDraggingClick) {
                                             client.sendMouseUp("left")
-                                        } else {
-                                            val duration = System.currentTimeMillis() - startTime
-                                            if (!isDrag && duration < 200 && totalDist < 15f) {
-                                                client.sendClick("left")
-                                                lastTapTime = System.currentTimeMillis()
-                                                tapPos = down.position
-                                                coroutineScope.launch {
-                                                    tapScale.snapTo(0f)
-                                                    tapScale.animateTo(
-                                                        1f,
-                                                        tween(280, easing = FastOutSlowInEasing)
-                                                    )
-                                                    tapPos = null
-                                                }
+                                        } else if (maxPointers < 2 && !isDrag && duration < 200 && totalDist < 15f) {
+                                            client.sendClick("left")
+                                            lastTapTime = System.currentTimeMillis()
+                                            tapPos = down.position
+                                            coroutineScope.launch {
+                                                tapScale.snapTo(0f)
+                                                tapScale.animateTo(
+                                                    1f,
+                                                    tween(280, easing = FastOutSlowInEasing)
+                                                )
+                                                tapPos = null
                                             }
                                         }
                                         break
                                     }
                                     val pressedChanges = event.changes.filter { it.pressed }
+                                    maxPointers = maxOf(maxPointers, pressedChanges.size)
+                                    if (pressedChanges.size >= 2) {
+                                        pressedChanges.forEach {
+                                            val d = it.position - it.previousPosition
+                                            twoFingerMoved += kotlin.math.sqrt(d.x * d.x + d.y * d.y)
+                                        }
+                                    }
                                     if (pressedChanges.size == 2) {
                                         val p1 = pressedChanges[0].position
                                         val p2 = pressedChanges[1].position
@@ -322,7 +318,7 @@ fun TouchpadScreen(
                 val scrollAcc = remember { java.util.concurrent.atomic.AtomicReference(0f) }
                 Box(
                     modifier = Modifier
-                        .width(56.dp)
+                        .width(scrollWidthDp.dp)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color.White.copy(alpha = 0.04f))
@@ -342,7 +338,8 @@ fun TouchpadScreen(
                                         scrollPointerId = change.id
                                         val dragAmount = change.position - change.previousPosition
                                         change.consume()
-                                        scrollOffset += dragAmount.y
+                                        val sign = if (invertScroll) -1f else 1f
+                                        scrollOffset += dragAmount.y * sign
                                         // Higher sensitivity => less finger travel per wheel notch,
                                         // so the same swipe scrolls proportionally further.
                                         val pxPerNotch = (SCROLL_PX_PER_NOTCH_AT_1X / sensitivity)
@@ -356,7 +353,7 @@ fun TouchpadScreen(
                                                 if (lastScrollTime.compareAndSet(last, now)) {
                                                     val dir = if (acc > 0) 1.0 else -1.0
                                                     val notches = (abs(acc) / pxPerNotch).toInt().coerceIn(1, 4)
-                                                    repeat(notches) { sendScroll(dir) }
+                                                    repeat(notches) { sendScroll(dir * sign) }
                                                     scrollAcc.set(acc - dir.toFloat() * pxPerNotch * notches)
                                                 }
                                             }
@@ -392,14 +389,14 @@ fun TouchpadScreen(
             }
         }
 
-        // ---- settings panel, anchored below the header toggle ----
+        // ---- settings panel, opened by a two-finger double tap ----
         if (showSettings) {
             Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(top = 40.dp, end = 12.dp)
-                    .width(230.dp)
+                    .padding(top = 10.dp, end = 12.dp)
+                    .width(250.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color(0xF20F172A))
                     .border(1.dp, BorderColor, RoundedCornerShape(18.dp))
@@ -437,6 +434,66 @@ fun TouchpadScreen(
                         inactiveTrackColor = BorderColor
                     )
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.scroll_width_label),
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${scrollWidthDp.toInt()}dp",
+                        color = BlueAccent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Slider(
+                    value = scrollWidthDp,
+                    onValueChange = {
+                        scrollWidthDp = it
+                        prefs.edit().putFloat(KEY_SCROLL_WIDTH, it).apply()
+                    },
+                    valueRange = 36f..110f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = BlueAccent,
+                        activeTrackColor = BlueAccent,
+                        inactiveTrackColor = BorderColor
+                    )
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.invert_scroll_label),
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Switch(
+                        checked = invertScroll,
+                        onCheckedChange = {
+                            invertScroll = it
+                            prefs.edit().putBoolean(KEY_INVERT_SCROLL, it).apply()
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = BlueAccent,
+                            uncheckedThumbColor = TextSecond,
+                            uncheckedTrackColor = BorderColor
+                        )
+                    )
+                }
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = serverIp,
