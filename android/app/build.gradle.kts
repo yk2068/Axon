@@ -11,13 +11,23 @@ android {
         applicationId = "com.example.axon"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.6.6"
+        versionCode = 2
+        versionName = "1.6.6-touchpad"
+    }
+
+    signingConfigs {
+        create("local") {
+            storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("local")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -40,7 +50,9 @@ android {
 }
 
 kotlin {
-    jvmToolchain(17)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 dependencies {

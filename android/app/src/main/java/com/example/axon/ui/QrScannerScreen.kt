@@ -65,8 +65,7 @@ private val VioletAccent = Color(0xFF8B5CF6)
 private val BorderColor  = Color(0xFF334155)
 @Composable
 fun QrScannerScreen(
-    onQrDetected: (String) -> Unit,
-    onBack: () -> Unit
+    onQrDetected: (String) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -79,7 +78,6 @@ fun QrScannerScreen(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { granted ->
             hasCamPermission = granted
-            if (!granted) onBack()
         }
     )
     LaunchedEffect(key1 = true) {
@@ -148,27 +146,6 @@ fun QrScannerScreen(
                     .statusBarsPadding()
                     .padding(20.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xCC0F172A))
-                        .border(1.dp, BorderColor, RoundedCornerShape(14.dp))
-                        .clickable(
-                            onClickLabel = stringResource(id = R.string.close_action),
-                            role = Role.Button
-                        ) { onBack() }
-                        .align(Alignment.TopStart),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Canvas(modifier = Modifier.size(16.dp)) {
-                        val w = size.width
-                        val h = size.height
-                        drawLine(Color.White, start = Offset(w, h / 2), end = Offset(0f, h / 2), strokeWidth = 2.5.dp.toPx())
-                        drawLine(Color.White, start = Offset(w * 0.45f, 0f), end = Offset(0f, h / 2), strokeWidth = 2.5.dp.toPx())
-                        drawLine(Color.White, start = Offset(w * 0.45f, h), end = Offset(0f, h / 2), strokeWidth = 2.5.dp.toPx())
-                    }
-                }
                 Box(
                     modifier = Modifier
                         .size(260.dp)

@@ -1,6 +1,10 @@
 package com.example.axon
+
 import android.content.Context
+import android.net.wifi.WifiManager
 import android.os.Bundle
+import android.os.PowerManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -8,50 +12,39 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
-import android.content.res.Configuration
-import java.util.Locale
-import com.example.axon.network.BluetoothClient
-import com.example.axon.network.InputClient
 import com.example.axon.network.WebSocketClient
 import com.example.axon.theme.AxonTheme
-import com.example.axon.ui.ConnectScreen
-import com.example.axon.ui.MainScreen
 import com.example.axon.ui.QrScannerScreen
-import com.example.axon.ui.StartScreen
+import com.example.axon.ui.TouchpadScreen
+
 enum class AppScreen {
-    Start,
-    Connect,
     Scan,
     Control
 }
-class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionListener, BluetoothClient.ConnectionListener {
+
+/**
+ * Single-purpose activity: scan a QR code, then act as a touchpad.
+ *
+ * While a session is up the activity holds a high-performance Wi-Fi lock and a partial
+ * wake lock so that turning the screen off does not tear down the WebSocket connection.
+ */
+class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionListener {
+
     private var webSocketClient: WebSocketClient? = null
-    private var bluetoothClient: BluetoothClient? = null
-    private var activeClient: InputClient? = null
-    private var currentScreen by mutableStateOf(AppScreen.Start)
-    private var connectionError by mutableStateOf("")
-    override fun attachBaseContext(newBase: Context) {
-        val prefs = newBase.getSharedPreferences("axon_prefs", MODE_PRIVATE)
-        val lang = prefs.getString("language", Locale.getDefault().language) ?: "es"
-        val locale = Locale(lang)
-        Locale.setDefault(locale)
-        val config = Configuration(newBase.resources.configuration)
-        config.setLocale(locale)
-        val context = newBase.createConfigurationContext(config)
-        super.attachBaseContext(context)
-    }
+    private var currentScreen by mutableStateOf(AppScreen.Scan)
+
+    private var wifiLock: WifiManager.WifiLock? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         webSocketClient = WebSocketClient(this)
-        bluetoothClient = BluetoothClient(this)
         enableEdgeToEdge()
         setContent {
-            val prefs = remember { getSharedPreferences("axon_prefs", MODE_PRIVATE) }
-            val currentLanguage = remember { prefs.getString("language", Locale.getDefault().language) ?: "es" }
             AxonTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -59,67 +52,18 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
                 ) {
                     Crossfade(targetState = currentScreen, label = "screenTransition") { screen ->
                         when (screen) {
-                            AppScreen.Start -> {
-                                StartScreen(
-                                    onStart = {
-                                        currentScreen = AppScreen.Connect
-                                    },
-                                    currentLanguage = currentLanguage,
-                                    onToggleLanguage = {
-                                        val newLang = if (currentLanguage == "es") "en" else "es"
-                                        prefs.edit().putString("language", newLang).apply()
-                                        recreate()
-                                    }
-                                )
-                            }
-                            AppScreen.Connect -> {
-                                ConnectScreen(
-                                    onConnect = { url ->
-                                        connectionError = ""
-                                        activeClient = webSocketClient
-                                        webSocketClient?.connect(url)
-                                    },
-                                    onConnectBluetooth = { mac ->
-                                        connectionError = ""
-                                        activeClient = bluetoothClient
-                                        bluetoothClient?.connect(mac)
-                                    },
-                                    onScanQr = {
-                                        currentScreen = AppScreen.Scan
-                                    },
-                                    onBack = {
-                                        currentScreen = AppScreen.Start
-                                    },
-                                    errorMessage = connectionError
-                                )
-                            }
                             AppScreen.Scan -> {
                                 QrScannerScreen(
-                                    onQrDetected = { url ->
-                                        currentScreen = AppScreen.Connect
-                                        connectionError = ""
-                                        val wsUrl = try {
-                                            val uri = java.net.URI(url)
-                                            val query = if (uri.rawQuery != null) "?${uri.rawQuery}" else ""
-                                            "ws://${uri.host}:${uri.port}/ws$query"
-                                        } catch (e: Exception) {
-                                            url.replace("http://", "ws://").replace("/?", "/ws?").replace("http://", "ws://")
-                                        }
-                                        activeClient = webSocketClient
-                                        webSocketClient?.connect(wsUrl)
-                                    },
-                                    onBack = {
-                                        currentScreen = AppScreen.Connect
-                                    }
+                                    onQrDetected = { url -> connectFromQr(url) }
                                 )
                             }
                             AppScreen.Control -> {
-                                activeClient?.let { client ->
-                                    MainScreen(
+                                webSocketClient?.let { client ->
+                                    TouchpadScreen(
                                         client = client,
                                         onDisconnect = {
                                             client.disconnect()
-                                            currentScreen = AppScreen.Start
+                                            currentScreen = AppScreen.Scan
                                         }
                                     )
                                 }
@@ -130,42 +74,90 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
             }
         }
     }
+
+    private fun connectFromQr(url: String) {
+        val wsUrl = try {
+            val uri = java.net.URI(url)
+            val query = if (uri.rawQuery != null) "?${uri.rawQuery}" else ""
+            "ws://${uri.host}:${uri.port}/ws$query"
+        } catch (e: Exception) {
+            url.replace("http://", "ws://").replace("/?", "/ws?")
+        }
+        webSocketClient?.connect(wsUrl)
+    }
+
+    private fun acquireKeepAlive() {
+        try {
+            if (wifiLock == null) {
+                val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                @Suppress("DEPRECATION")
+                wifiLock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "axon:wifi")
+                    .apply { setReferenceCounted(false) }
+            }
+            if (wifiLock?.isHeld != true) wifiLock?.acquire()
+
+            if (wakeLock == null) {
+                val power = applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "axon:session")
+                    .apply { setReferenceCounted(false) }
+            }
+            if (wakeLock?.isHeld != true) wakeLock?.acquire()
+        } catch (e: Exception) {
+            // Locks are best-effort; the session still works without them.
+        }
+    }
+
+    private fun releaseKeepAlive() {
+        try {
+            if (wifiLock?.isHeld == true) wifiLock?.release()
+        } catch (e: Exception) {
+        }
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (e: Exception) {
+        }
+    }
+
     override fun onConnected() {
         runOnUiThread {
+            acquireKeepAlive()
             currentScreen = AppScreen.Control
-            connectionError = ""
         }
     }
+
     override fun onDisconnected() {
         runOnUiThread {
-            currentScreen = AppScreen.Connect
+            releaseKeepAlive()
+            currentScreen = AppScreen.Scan
         }
     }
+
     override fun onError(message: String) {
         runOnUiThread {
-            currentScreen = AppScreen.Connect
-            connectionError = message
+            releaseKeepAlive()
+            currentScreen = AppScreen.Scan
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
     }
+
     override fun onDestroy() {
         super.onDestroy()
+        releaseKeepAlive()
         webSocketClient?.disconnect()
-        bluetoothClient?.disconnect()
     }
+
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         if (currentScreen == AppScreen.Control) {
             when (event.keyCode) {
                 android.view.KeyEvent.KEYCODE_VOLUME_UP -> {
                     if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-                        android.util.Log.d("AxonKeys", "Volume UP pressed! Sending volumeup to activeClient")
-                        activeClient?.sendKey("volumeup")
+                        webSocketClient?.sendKey("volumeup")
                     }
                     return true
                 }
                 android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> {
                     if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-                        android.util.Log.d("AxonKeys", "Volume DOWN pressed! Sending volumedown to activeClient")
-                        activeClient?.sendKey("volumedown")
+                        webSocketClient?.sendKey("volumedown")
                     }
                     return true
                 }
