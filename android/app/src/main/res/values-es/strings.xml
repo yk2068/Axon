@@ -45,6 +45,8 @@
     <string name="sensitivity_label">Sensibilidad</string>
     <string name="disconnect_action">Desconectar</string>
     <string name="scroll_label">DESPLAZAR</string>
+    <string name="session_channel">Sesión</string>
+    <string name="session_notification">Touchpad conectado</string>
     <string name="left_click">Clic izquierdo</string>
     <string name="right_click">Clic derecho</string>
     <string name="guide_title">Guía de Conexión</string>

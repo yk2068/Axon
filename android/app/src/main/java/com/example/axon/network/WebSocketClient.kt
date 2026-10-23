@@ -15,6 +15,8 @@ class WebSocketClient(private val listener: WebSocketConnectionListener) : Input
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .writeTimeout(0, TimeUnit.MILLISECONDS)
+        .pingInterval(10, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
     private var webSocket: WebSocket? = null
     interface WebSocketConnectionListener {

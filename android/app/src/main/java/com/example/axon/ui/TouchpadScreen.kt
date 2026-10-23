@@ -14,13 +14,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -68,6 +71,9 @@ private val RedAccent = Color(0xFFEF4444)
 private const val PREFS = "axon_prefs"
 private const val KEY_SENSITIVITY = "sensitivity"
 private const val DEFAULT_SENSITIVITY = 2.2f
+
+/** Finger travel, in dp, that produces one wheel notch at 1x sensitivity. */
+private const val SCROLL_PX_PER_NOTCH_AT_1X = 40f
 
 @Composable
 fun TouchpadScreen(
@@ -125,246 +131,266 @@ fun TouchpadScreen(
             .fillMaxSize()
             .background(Brush.verticalGradient(colors = listOf(BgGradStart, BgGradEnd)))
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(horizontal = 6.dp)
+                .padding(top = 2.dp, bottom = 6.dp)
         ) {
-            // ---- main touch surface ----
-            Box(
+            // ---- slim header: keeps the settings toggle clear of both the status bar
+            //      and the scroll strip, so nothing overlaps ----
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Color.White.copy(alpha = 0.04f))
-                    .border(1.dp, BorderColor, RoundedCornerShape(24.dp))
-                    .pointerInput(isLocalConnection) {
-                        var lastTapTime = 0L
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            val downTime = System.currentTimeMillis()
-                            val isDoubleTap = (downTime - lastTapTime) < 300
-                            var isDraggingClick = false
-                            touchPos = down.position
-                            accDx.set(0L)
-                            accDy.set(0L)
-                            var dragPointerId = down.id
-                            val startTime = System.currentTimeMillis()
-                            var isDrag = false
-                            var totalDist = 0f
-                            var lastZoomDist: Float? = null
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val anyPressed = event.changes.any { it.pressed }
-                                if (!anyPressed) {
-                                    touchPos = null
-                                    val dx = java.lang.Double.longBitsToDouble(accDx.getAndSet(0L))
-                                    val dy = java.lang.Double.longBitsToDouble(accDy.getAndSet(0L))
-                                    if (dx != 0.0 || dy != 0.0) sendMove(dx, dy)
-                                    if (isDraggingClick) {
-                                        client.sendMouseUp("left")
-                                    } else {
-                                        val duration = System.currentTimeMillis() - startTime
-                                        if (!isDrag && duration < 200 && totalDist < 15f) {
-                                            client.sendClick("left")
-                                            lastTapTime = System.currentTimeMillis()
-                                            tapPos = down.position
-                                            coroutineScope.launch {
-                                                tapScale.snapTo(0f)
-                                                tapScale.animateTo(
-                                                    1f,
-                                                    tween(280, easing = FastOutSlowInEasing)
-                                                )
-                                                tapPos = null
+                    .fillMaxWidth()
+                    .height(30.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .alpha(0.35f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { showSettings = !showSettings },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(modifier = Modifier.size(14.dp)) {
+                        val h = size.height
+                        val w = size.width
+                        val gaps = listOf(h * 0.15f, h * 0.5f, h * 0.85f)
+                        gaps.forEach { y ->
+                            drawLine(
+                                color = TextPrimary,
+                                start = Offset(0f, y),
+                                end = Offset(w, y),
+                                strokeWidth = 1.6.dp.toPx()
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                // ---- main touch surface ----
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color.White.copy(alpha = 0.04f))
+                        .border(1.dp, BorderColor, RoundedCornerShape(24.dp))
+                        .pointerInput(isLocalConnection) {
+                            var lastTapTime = 0L
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                val downTime = System.currentTimeMillis()
+                                val isDoubleTap = (downTime - lastTapTime) < 300
+                                var isDraggingClick = false
+                                touchPos = down.position
+                                accDx.set(0L)
+                                accDy.set(0L)
+                                var dragPointerId = down.id
+                                val startTime = System.currentTimeMillis()
+                                var isDrag = false
+                                var totalDist = 0f
+                                var lastZoomDist: Float? = null
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val anyPressed = event.changes.any { it.pressed }
+                                    if (!anyPressed) {
+                                        touchPos = null
+                                        val dx = java.lang.Double.longBitsToDouble(accDx.getAndSet(0L))
+                                        val dy = java.lang.Double.longBitsToDouble(accDy.getAndSet(0L))
+                                        if (dx != 0.0 || dy != 0.0) sendMove(dx, dy)
+                                        if (isDraggingClick) {
+                                            client.sendMouseUp("left")
+                                        } else {
+                                            val duration = System.currentTimeMillis() - startTime
+                                            if (!isDrag && duration < 200 && totalDist < 15f) {
+                                                client.sendClick("left")
+                                                lastTapTime = System.currentTimeMillis()
+                                                tapPos = down.position
+                                                coroutineScope.launch {
+                                                    tapScale.snapTo(0f)
+                                                    tapScale.animateTo(
+                                                        1f,
+                                                        tween(280, easing = FastOutSlowInEasing)
+                                                    )
+                                                    tapPos = null
+                                                }
                                             }
                                         }
+                                        break
                                     }
-                                    break
-                                }
-                                val pressedChanges = event.changes.filter { it.pressed }
-                                if (pressedChanges.size == 2) {
-                                    val p1 = pressedChanges[0].position
-                                    val p2 = pressedChanges[1].position
-                                    val dist = kotlin.math.sqrt(
-                                        (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y)
-                                    )
-                                    if (lastZoomDist != null) {
-                                        val delta = dist - lastZoomDist!!
-                                        if (abs(delta) > 15f) {
-                                            if (delta > 0) {
-                                                client.sendKeyCombo("ctrl", "+")
-                                            } else {
-                                                client.sendKeyCombo("ctrl", "-")
+                                    val pressedChanges = event.changes.filter { it.pressed }
+                                    if (pressedChanges.size == 2) {
+                                        val p1 = pressedChanges[0].position
+                                        val p2 = pressedChanges[1].position
+                                        val dist = kotlin.math.sqrt(
+                                            (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y)
+                                        )
+                                        if (lastZoomDist != null) {
+                                            val delta = dist - lastZoomDist!!
+                                            if (abs(delta) > 15f) {
+                                                if (delta > 0) {
+                                                    client.sendKeyCombo("ctrl", "+")
+                                                } else {
+                                                    client.sendKeyCombo("ctrl", "-")
+                                                }
+                                                lastZoomDist = dist
                                             }
+                                        } else {
                                             lastZoomDist = dist
                                         }
+                                        event.changes.forEach { it.consume() }
                                     } else {
-                                        lastZoomDist = dist
+                                        lastZoomDist = null
                                     }
-                                    event.changes.forEach { it.consume() }
-                                } else {
-                                    lastZoomDist = null
-                                }
-                                val change = event.changes.firstOrNull { it.id == dragPointerId && it.pressed }
-                                    ?: event.changes.firstOrNull { it.pressed }
-                                if (change != null) {
-                                    dragPointerId = change.id
-                                    touchPos = change.position
-                                    val dragAmount = change.position - change.previousPosition
-                                    change.consume()
-                                    if (pressedChanges.size == 1) {
-                                        val dist = kotlin.math.sqrt(
-                                            dragAmount.x * dragAmount.x + dragAmount.y * dragAmount.y
-                                        )
-                                        totalDist += dist
-                                        if (totalDist > 8f) {
-                                            isDrag = true
-                                            if (isDoubleTap && !isDraggingClick) {
-                                                isDraggingClick = true
-                                                client.sendMouseDown("left")
+                                    val change = event.changes.firstOrNull { it.id == dragPointerId && it.pressed }
+                                        ?: event.changes.firstOrNull { it.pressed }
+                                    if (change != null) {
+                                        dragPointerId = change.id
+                                        touchPos = change.position
+                                        val dragAmount = change.position - change.previousPosition
+                                        change.consume()
+                                        if (pressedChanges.size == 1) {
+                                            val dist = kotlin.math.sqrt(
+                                                dragAmount.x * dragAmount.x + dragAmount.y * dragAmount.y
+                                            )
+                                            totalDist += dist
+                                            if (totalDist > 8f) {
+                                                isDrag = true
+                                                if (isDoubleTap && !isDraggingClick) {
+                                                    isDraggingClick = true
+                                                    client.sendMouseDown("left")
+                                                }
                                             }
-                                        }
-                                        val gain = sensitivity.toDouble()
-                                        val prevDx = java.lang.Double.longBitsToDouble(accDx.get())
-                                        val prevDy = java.lang.Double.longBitsToDouble(accDy.get())
-                                        accDx.set(java.lang.Double.doubleToRawLongBits(prevDx + dragAmount.x.toDouble() * gain))
-                                        accDy.set(java.lang.Double.doubleToRawLongBits(prevDy + dragAmount.y.toDouble() * gain))
-                                        dragChannel.trySend(Unit)
-                                    }
-                                }
-                            }
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    touchPos?.let { pos ->
-                        drawCircle(
-                            color = BlueAccent.copy(alpha = 0.15f),
-                            radius = 48.dp.toPx(),
-                            center = pos
-                        )
-                        drawCircle(
-                            color = BlueAccent.copy(alpha = 0.6f),
-                            radius = 5.dp.toPx(),
-                            center = pos
-                        )
-                    }
-                    tapPos?.let { pos ->
-                        drawCircle(
-                            color = BlueAccent.copy(alpha = 0.3f * (1f - tapScale.value)),
-                            radius = 38.dp.toPx() * tapScale.value,
-                            center = pos,
-                            style = Stroke(width = 1.5.dp.toPx())
-                        )
-                    }
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "⬡", color = TextSecond.copy(alpha = 0.12f), fontSize = 32.sp)
-                }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // ---- scroll strip ----
-            val scrollAcc = remember { java.util.concurrent.atomic.AtomicReference(0f) }
-            Box(
-                modifier = Modifier
-                    .width(56.dp)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Color.White.copy(alpha = 0.04f))
-                    .border(1.dp, BorderColor, RoundedCornerShape(24.dp))
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            scrollAcc.set(0f)
-                            var scrollPointerId = down.id
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val anyPressed = event.changes.any { it.pressed }
-                                if (!anyPressed) break
-                                val change = event.changes.firstOrNull { it.id == scrollPointerId && it.pressed }
-                                    ?: event.changes.firstOrNull { it.pressed }
-                                if (change != null) {
-                                    scrollPointerId = change.id
-                                    val dragAmount = change.position - change.previousPosition
-                                    change.consume()
-                                    scrollOffset += dragAmount.y
-                                    val acc = scrollAcc.get() + dragAmount.y
-                                    scrollAcc.set(acc)
-                                    if (abs(acc) > 18f) {
-                                        val now = System.currentTimeMillis()
-                                        val last = lastScrollTime.get()
-                                        if (now - last >= scrollThrottleMs) {
-                                            if (lastScrollTime.compareAndSet(last, now)) {
-                                                sendScroll(if (acc > 0) 1.0 else -1.0)
-                                                scrollAcc.set(0f)
-                                            }
+                                            val gain = sensitivity.toDouble()
+                                            val prevDx = java.lang.Double.longBitsToDouble(accDx.get())
+                                            val prevDy = java.lang.Double.longBitsToDouble(accDy.get())
+                                            accDx.set(java.lang.Double.doubleToRawLongBits(prevDx + dragAmount.x.toDouble() * gain))
+                                            accDy.set(java.lang.Double.doubleToRawLongBits(prevDy + dragAmount.y.toDouble() * gain))
+                                            dragChannel.trySend(Unit)
                                         }
                                     }
                                 }
                             }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        touchPos?.let { pos ->
+                            drawCircle(
+                                color = BlueAccent.copy(alpha = 0.15f),
+                                radius = 48.dp.toPx(),
+                                center = pos
+                            )
+                            drawCircle(
+                                color = BlueAccent.copy(alpha = 0.6f),
+                                radius = 5.dp.toPx(),
+                                center = pos
+                            )
                         }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val step = 22.dp.toPx()
-                    var currentY = scrollOffset % step
-                    while (currentY < size.height + step) {
-                        drawLine(
-                            color = BorderColor.copy(alpha = 0.3f),
-                            start = Offset(10.dp.toPx(), currentY),
-                            end = Offset(size.width - 10.dp.toPx(), currentY),
-                            strokeWidth = 1f
-                        )
-                        currentY += step
+                        tapPos?.let { pos ->
+                            drawCircle(
+                                color = BlueAccent.copy(alpha = 0.3f * (1f - tapScale.value)),
+                                radius = 38.dp.toPx() * tapScale.value,
+                                center = pos,
+                                style = Stroke(width = 1.5.dp.toPx())
+                            )
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "⬡", color = TextSecond.copy(alpha = 0.12f), fontSize = 32.sp)
                     }
                 }
-                Text(
-                    text = stringResource(id = R.string.scroll_label),
-                    color = TextSecond.copy(alpha = 0.4f),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
-                    modifier = Modifier.rotate(90f)
-                )
-            }
-        }
 
-        // ---- settings toggle (top-right, deliberately unobtrusive) ----
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 14.dp, end = 16.dp)
-                .size(30.dp)
-                .alpha(0.35f)
-                .clip(RoundedCornerShape(10.dp))
-                .clickable { showSettings = !showSettings },
-            contentAlignment = Alignment.Center
-        ) {
-            Canvas(modifier = Modifier.size(14.dp)) {
-                val h = size.height
-                val w = size.width
-                val gaps = listOf(h * 0.15f, h * 0.5f, h * 0.85f)
-                gaps.forEach { y ->
-                    drawLine(
-                        color = TextPrimary,
-                        start = Offset(0f, y),
-                        end = Offset(w, y),
-                        strokeWidth = 1.6.dp.toPx()
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // ---- scroll strip: speed follows the sensitivity slider ----
+                val scrollAcc = remember { java.util.concurrent.atomic.AtomicReference(0f) }
+                Box(
+                    modifier = Modifier
+                        .width(56.dp)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color.White.copy(alpha = 0.04f))
+                        .border(1.dp, BorderColor, RoundedCornerShape(24.dp))
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                scrollAcc.set(0f)
+                                var scrollPointerId = down.id
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val anyPressed = event.changes.any { it.pressed }
+                                    if (!anyPressed) break
+                                    val change = event.changes.firstOrNull { it.id == scrollPointerId && it.pressed }
+                                        ?: event.changes.firstOrNull { it.pressed }
+                                    if (change != null) {
+                                        scrollPointerId = change.id
+                                        val dragAmount = change.position - change.previousPosition
+                                        change.consume()
+                                        scrollOffset += dragAmount.y
+                                        // Higher sensitivity => less finger travel per wheel notch,
+                                        // so the same swipe scrolls proportionally further.
+                                        val pxPerNotch = (SCROLL_PX_PER_NOTCH_AT_1X / sensitivity)
+                                            .coerceIn(6f, 60f)
+                                        val acc = scrollAcc.get() + dragAmount.y
+                                        scrollAcc.set(acc)
+                                        if (abs(acc) >= pxPerNotch) {
+                                            val now = System.currentTimeMillis()
+                                            val last = lastScrollTime.get()
+                                            if (now - last >= scrollThrottleMs) {
+                                                if (lastScrollTime.compareAndSet(last, now)) {
+                                                    val dir = if (acc > 0) 1.0 else -1.0
+                                                    val notches = (abs(acc) / pxPerNotch).toInt().coerceIn(1, 4)
+                                                    repeat(notches) { sendScroll(dir) }
+                                                    scrollAcc.set(acc - dir.toFloat() * pxPerNotch * notches)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val step = 22.dp.toPx()
+                        var currentY = scrollOffset % step
+                        while (currentY < size.height + step) {
+                            drawLine(
+                                color = BorderColor.copy(alpha = 0.3f),
+                                start = Offset(10.dp.toPx(), currentY),
+                                end = Offset(size.width - 10.dp.toPx(), currentY),
+                                strokeWidth = 1f
+                            )
+                            currentY += step
+                        }
+                    }
+                    Text(
+                        text = stringResource(id = R.string.scroll_label),
+                        color = TextSecond.copy(alpha = 0.4f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp,
+                        modifier = Modifier.rotate(90f)
                     )
                 }
             }
         }
 
-        // ---- settings panel ----
+        // ---- settings panel, anchored below the header toggle ----
         if (showSettings) {
             Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 52.dp, end = 12.dp)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(top = 40.dp, end = 12.dp)
                     .width(230.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color(0xF20F172A))
