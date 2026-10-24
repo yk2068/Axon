@@ -110,6 +110,9 @@ func (s *DarwinSimulator) ScrollDelta(delta float64) {
 	}
 }
 
+// ScrollDeltaH has no counterpart in the helper binary used here.
+func (s *DarwinSimulator) ScrollDeltaH(delta float64) {}
+
 func (s *DarwinSimulator) Type(text string) {
 	s.Send("type " + text)
 }

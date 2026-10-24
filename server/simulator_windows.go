@@ -40,10 +40,11 @@ var (
 )
 
 type WindowsSimulator struct {
-	mu        sync.Mutex
-	accX      float64
-	accY      float64
-	scrollAcc float64
+	mu         sync.Mutex
+	accX       float64
+	accY       float64
+	scrollAcc  float64
+	scrollAccH float64
 }
 
 func initSimulator() InputSimulator {
@@ -123,6 +124,24 @@ func (s *WindowsSimulator) ScrollDelta(delta float64) {
 		return
 	}
 	s.sendMouseInput(0x0800, 0, 0, uint32(steps))
+}
+
+// ScrollDeltaH is the horizontal twin, where a positive delta moves the
+// content to the right (the page follows the fingers, like the vertical case).
+// WM_MOUSEHWHEEL counts the other way round, so the sign is flipped here.
+func (s *WindowsSimulator) ScrollDeltaH(delta float64) {
+	if delta == 0 {
+		return
+	}
+	s.mu.Lock()
+	s.scrollAccH += delta * 120
+	steps := int32(s.scrollAccH)
+	s.scrollAccH -= float64(steps)
+	s.mu.Unlock()
+	if steps == 0 {
+		return
+	}
+	s.sendMouseInput(0x1000, 0, 0, uint32(-steps))
 }
 func (s *WindowsSimulator) Type(text string) {
 	for _, r := range text {

@@ -78,8 +78,8 @@ class BluetoothClient(private val listener: ConnectionListener) : InputClient {
     override fun sendMouseUp(button: String) {
         send("{\"type\":\"mouseup\",\"button\":\"$button\"}")
     }
-    override fun sendScroll(dy: Double) {
-        send("{\"type\":\"scroll\",\"dy\":$dy}")
+    override fun sendScroll(dy: Double, dx: Double) {
+        send("{\"type\":\"scroll\",\"dy\":$dy,\"dx\":$dx}")
     }
     override fun sendType(text: String) {
         val escaped = text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
@@ -90,5 +90,14 @@ class BluetoothClient(private val listener: ConnectionListener) : InputClient {
     }
     override fun sendKeyCombo(modifier: String, key: String) {
         send("{\"type\":\"keycombo\",\"modifier\":\"$modifier\",\"key\":\"$key\"}")
+    }
+    override fun sendPinchBegin() {
+        send("{\"type\":\"pinch\",\"phase\":\"begin\"}")
+    }
+    override fun sendPinchUpdate(scaleDelta: Double) {
+        send("{\"type\":\"pinch\",\"phase\":\"update\",\"scale\":$scaleDelta}")
+    }
+    override fun sendPinchEnd() {
+        send("{\"type\":\"pinch\",\"phase\":\"end\"}")
     }
 }

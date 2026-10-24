@@ -418,6 +418,17 @@ func (s *LinuxSimulator) ScrollDelta(delta float64) {
 		s.Send("click 5")
 	}
 }
+
+// ScrollDeltaH uses X11 buttons 6/7, where 6 scrolls left and 7 scrolls right.
+func (s *LinuxSimulator) ScrollDeltaH(delta float64) {
+	n := int(delta)
+	for i := 0; i < n && i < 20; i++ {
+		s.Send("click 7")
+	}
+	for i := 0; i < -n && i < 20; i++ {
+		s.Send("click 6")
+	}
+}
 func (s *LinuxSimulator) Type(text string) {
 	s.Send(fmt.Sprintf("type -- %s", text))
 }

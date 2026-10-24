@@ -40,6 +40,7 @@ func (m *MockSimulator) ScrollDelta(delta float64) {
 		m.lastScroll = "down"
 	}
 }
+func (m *MockSimulator) ScrollDeltaH(delta float64) {}
 func (m *MockSimulator) Type(text string) {
 	m.lastType = text
 }

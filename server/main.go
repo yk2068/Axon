@@ -161,6 +161,8 @@ type ClientMessage struct {
 	Text      string  `json:"text"`
 	Key       string  `json:"key"`
 	Modifier  string  `json:"modifier"`
+	Phase     string  `json:"phase"`
+	Scale     float64 `json:"scale"`
 	Timestamp int64   `json:"timestamp"`
 	Token     string  `json:"token,omitempty"`
 }
@@ -292,12 +294,22 @@ func handleMessages(conn *websocket.Conn) {
 			simulator.MouseUp(msg.Button)
 		case "scroll":
 			simulator.ScrollDelta(msg.Dy)
+			simulator.ScrollDeltaH(msg.Dx)
 		case "type":
 			simulator.Type(msg.Text)
 		case "key":
 			simulator.Key(msg.Key)
 		case "keycombo":
 			simulator.KeyCombo(msg.Modifier, msg.Key)
+		case "pinch":
+			switch msg.Phase {
+			case "begin":
+				pinchBegin()
+			case "update":
+				pinchUpdate(msg.Scale)
+			case "end":
+				pinchEnd()
+			}
 		}
 	}
 }
@@ -328,6 +340,13 @@ func startUDPServer(conn *net.UDPConn) {
 			simulator.MoveMouse(float64(dx), float64(dy))
 		case 1:
 			simulator.ScrollDelta(float64(dx))
+			simulator.ScrollDeltaH(float64(dy))
+		case 2:
+			pinchBegin()
+		case 3:
+			pinchUpdate(float64(dx))
+		case 4:
+			pinchEnd()
 		}
 	}
 }
@@ -411,7 +430,24 @@ func main() {
 	flag.IntVar(&udpPort, "udp-port", 6970, "UDP port for fast input protocol (0 for auto-allocation)")
 	hostOverride := flag.String("host", "", "Override the advertised local IP address")
 	tokenOverride := flag.String("token", "", "Use a fixed auth token instead of a random one")
+	pinchTest := flag.Bool("pinch-test", false, "Run one pinch gesture under the cursor and exit (checks touch injection)")
 	flag.Parse()
+	if *pinchTest {
+		// Spread the two synthetic fingers apart, then back together. Whatever is
+		// under the cursor zooms in and back out, which is all this flag is for.
+		pinchBegin()
+		for i := 0; i < 30; i++ {
+			pinchUpdate(0.03)
+			time.Sleep(16 * time.Millisecond)
+		}
+		for i := 0; i < 30; i++ {
+			pinchUpdate(-0.03)
+			time.Sleep(16 * time.Millisecond)
+		}
+		pinchEnd()
+		fmt.Println("pinch test finished")
+		os.Exit(0)
+	}
 	if *showVersion {
 		fmt.Println("Axon Server v1.6.6")
 		fmt.Println("High-speed wireless input bridge")

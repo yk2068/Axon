@@ -36,7 +36,7 @@ class UdpClient(
         val bytes = createMovePacket(dx, dy)
         channel.trySend(bytes)
     }
-    fun sendScroll(dy: Double) {
+    fun sendScroll(dy: Double, dx: Double = 0.0) {
         val bytes = ByteArray(9)
         bytes[0] = 1.toByte()
         val yBits = java.lang.Float.floatToIntBits(dy.toFloat())
@@ -44,11 +44,11 @@ class UdpClient(
         bytes[2] = (yBits shr 16).toByte()
         bytes[3] = (yBits shr 8).toByte()
         bytes[4] = yBits.toByte()
-        val zeroBits = java.lang.Float.floatToIntBits(0f)
-        bytes[5] = (zeroBits shr 24).toByte()
-        bytes[6] = (zeroBits shr 16).toByte()
-        bytes[7] = (zeroBits shr 8).toByte()
-        bytes[8] = zeroBits.toByte()
+        val xBits = java.lang.Float.floatToIntBits(dx.toFloat())
+        bytes[5] = (xBits shr 24).toByte()
+        bytes[6] = (xBits shr 16).toByte()
+        bytes[7] = (xBits shr 8).toByte()
+        bytes[8] = xBits.toByte()
         channel.trySend(bytes)
     }
     fun close() {
@@ -58,7 +58,34 @@ class UdpClient(
         } catch (e: Exception) {
         }
     }
+    // Pinch rides the same datagram channel as motion: it is a continuous stream of
+    // tiny relative changes, and a late packet is worthless. Packet types 2/3/4 keep
+    // it separate from move (0) and scroll (1).
+    fun sendPinchBegin() {
+        channel.trySend(pinchPacket(2, 0.0))
+    }
+    fun sendPinchUpdate(scaleDelta: Double) {
+        channel.trySend(pinchPacket(3, scaleDelta))
+    }
+    fun sendPinchEnd() {
+        channel.trySend(pinchPacket(4, 0.0))
+    }
     companion object {
+        private fun pinchPacket(type: Int, value: Double): ByteArray {
+            val bytes = ByteArray(9)
+            bytes[0] = type.toByte()
+            val bits = java.lang.Float.floatToIntBits(value.toFloat())
+            bytes[1] = (bits shr 24).toByte()
+            bytes[2] = (bits shr 16).toByte()
+            bytes[3] = (bits shr 8).toByte()
+            bytes[4] = bits.toByte()
+            val zero = java.lang.Float.floatToIntBits(0f)
+            bytes[5] = (zero shr 24).toByte()
+            bytes[6] = (zero shr 16).toByte()
+            bytes[7] = (zero shr 8).toByte()
+            bytes[8] = zero.toByte()
+            return bytes
+        }
         fun createMovePacket(dx: Double, dy: Double): ByteArray {
             val bytes = ByteArray(9)
             bytes[0] = 0.toByte()

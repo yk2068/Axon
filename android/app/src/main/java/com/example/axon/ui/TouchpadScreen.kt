@@ -92,6 +92,20 @@ private const val SCROLL_MIN_NOTCH = 0.01f
 /** Minimum gap between move packets: 8ms keeps motion at ~120Hz without flooding the link. */
 private const val MIN_SEND_INTERVAL_MS = 8L
 
+/** Finger-gap travel, in px, that turns a two-finger touch into a pinch. */
+private const val PINCH_ARM_PX = 14f
+
+/** Travel of the two-finger centre, in px, that commits the gesture to scrolling. */
+private const val PAN_ARM_PX = 12f
+
+/** Gesture modes for a two-finger touch: undecided until one arm wins. */
+private const val TWO_FINGER_UNDECIDED = 0
+private const val TWO_FINGER_SCROLL = 1
+private const val TWO_FINGER_PINCH = 2
+
+/** Below this gap the relative change explodes; ignore it. */
+private const val PINCH_MIN_DIST = 40f
+
 @Composable
 fun TouchpadScreen(
     client: InputClient,
@@ -124,11 +138,21 @@ fun TouchpadScreen(
     val accDx = remember { java.util.concurrent.atomic.AtomicLong(0L) }
     val accDy = remember { java.util.concurrent.atomic.AtomicLong(0L) }
     val pendingNotches = remember { java.util.concurrent.atomic.AtomicReference(0f) }
+    val pendingNotchesX = remember { java.util.concurrent.atomic.AtomicReference(0f) }
     val sendMove = { dx: Double, dy: Double ->
         if (!useUdp || udpClient == null) client.sendMove(dx, dy) else udpClient.sendMove(dx, dy)
     }
-    val sendScroll = { dy: Double ->
-        if (!useUdp || udpClient == null) client.sendScroll(dy) else udpClient.sendScroll(dy)
+    val sendScroll = { dy: Double, dx: Double ->
+        if (!useUdp || udpClient == null) client.sendScroll(dy, dx) else udpClient.sendScroll(dy, dx)
+    }
+    val sendPinchBegin = {
+        if (!useUdp || udpClient == null) client.sendPinchBegin() else udpClient.sendPinchBegin()
+    }
+    val sendPinchUpdate = { d: Double ->
+        if (!useUdp || udpClient == null) client.sendPinchUpdate(d) else udpClient.sendPinchUpdate(d)
+    }
+    val sendPinchEnd = {
+        if (!useUdp || udpClient == null) client.sendPinchEnd() else udpClient.sendPinchEnd()
     }
     // Scroll is fed as fractional notches (1.0 == one wheel notch) several times per
     // frame instead of whole notches on a 12ms timer, so the far end can emit sub-notch
@@ -139,16 +163,26 @@ fun TouchpadScreen(
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(SCROLL_TICK_MS)
-            val owed = pendingNotches.get()
-            if (owed == 0f) continue
-            if (abs(owed) < SCROLL_MIN_NOTCH) {
+            val owedY = pendingNotches.get()
+            val owedX = pendingNotchesX.get()
+            if (owedY == 0f && owedX == 0f) continue
+            var outY = 0f
+            var outX = 0f
+            if (abs(owedY) < SCROLL_MIN_NOTCH) {
                 pendingNotches.set(0f)
-                sendScroll(owed.toDouble())
+                outY = owedY
             } else {
-                val released = owed * SCROLL_RELEASE
-                pendingNotches.set(owed - released)
-                sendScroll(released.toDouble())
+                outY = owedY * SCROLL_RELEASE
+                pendingNotches.set(owedY - outY)
             }
+            if (abs(owedX) < SCROLL_MIN_NOTCH) {
+                pendingNotchesX.set(0f)
+                outX = owedX
+            } else {
+                outX = owedX * SCROLL_RELEASE
+                pendingNotchesX.set(owedX - outX)
+            }
+            if (outY != 0f || outX != 0f) sendScroll(outY.toDouble(), outX.toDouble())
         }
     }
     val dragChannel = remember {
@@ -210,7 +244,15 @@ fun TouchpadScreen(
                                 val startTime = System.currentTimeMillis()
                                 var isDrag = false
                                 var totalDist = 0f
-                                var lastZoomDist: Float? = null
+                                var pinchLastDist: Float? = null
+                                var pinchLastCenter: Offset? = null
+                                var pinchActive = false
+                                var pinchArm = 0f
+                                var panArm = 0f
+                                var panSumX = 0f
+                                var panSumY = 0f
+                                var horizontalPan = false
+                                var twoFingerMode = TWO_FINGER_UNDECIDED
                                 var maxPointers = 1
                                 var twoFingerMoved = 0f
                                 while (true) {
@@ -218,6 +260,10 @@ fun TouchpadScreen(
                                     val anyPressed = event.changes.any { it.pressed }
                                     if (!anyPressed) {
                                         touchPos = null
+                                        if (pinchActive) {
+                                            pinchActive = false
+                                            sendPinchEnd()
+                                        }
                                         val dx = java.lang.Double.longBitsToDouble(accDx.getAndSet(0L))
                                         val dy = java.lang.Double.longBitsToDouble(accDy.getAndSet(0L))
                                         if (dx != 0.0 || dy != 0.0) sendMove(dx, dy)
@@ -265,22 +311,74 @@ fun TouchpadScreen(
                                         val dist = kotlin.math.sqrt(
                                             (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y)
                                         )
-                                        if (lastZoomDist != null) {
-                                            val delta = dist - lastZoomDist!!
-                                            if (abs(delta) > 15f) {
-                                                if (delta > 0) {
-                                                    client.sendKeyCombo("ctrl", "+")
-                                                } else {
-                                                    client.sendKeyCombo("ctrl", "-")
-                                                }
-                                                lastZoomDist = dist
-                                            }
+                                        val center = Offset((p1.x + p2.x) / 2f, (p1.y + p2.y) / 2f)
+                                        val previous = pinchLastDist
+                                        if (previous == null) {
+                                            pinchLastDist = dist
                                         } else {
-                                            lastZoomDist = dist
+                                            val step = dist - previous
+                                            val centerDx = pinchLastCenter?.let { center.x - it.x } ?: 0f
+                                            val centerDy = pinchLastCenter?.let { center.y - it.y } ?: 0f
+                                            val panStep = kotlin.math.sqrt(centerDx * centerDx + centerDy * centerDy)
+                                            // Two gestures share the same fingers: sliding both
+                                            // together is a scroll, spreading them apart is a zoom.
+                                            // Accumulate both and let whichever grows first win, so a
+                                            // parallel swipe no longer arms the pinch through wobble.
+                                            if (twoFingerMode == TWO_FINGER_UNDECIDED) {
+                                                pinchArm += abs(step)
+                                                panArm += panStep
+                                                panSumX += centerDx
+                                                panSumY += centerDy
+                                                if (panArm >= PAN_ARM_PX && panArm >= pinchArm) {
+                                                    twoFingerMode = TWO_FINGER_SCROLL
+                                                    // Lock the axis once, so a slightly diagonal
+                                                    // swipe scrolls one way instead of both.
+                                                    horizontalPan = abs(panSumX) > abs(panSumY)
+                                                } else if (pinchArm >= PINCH_ARM_PX) {
+                                                    twoFingerMode = TWO_FINGER_PINCH
+                                                    pinchActive = true
+                                                    sendPinchBegin()
+                                                }
+                                            }
+                                            if (twoFingerMode == TWO_FINGER_PINCH) {
+                                                if (previous > PINCH_MIN_DIST) {
+                                                    sendPinchUpdate((step / previous).toDouble())
+                                                }
+                                            } else if (twoFingerMode == TWO_FINGER_SCROLL) {
+                                                val sign = if (invertScroll) -1f else 1f
+                                                val pxPerNotch = (SCROLL_PX_PER_NOTCH_AT_1X / sensitivity)
+                                                    .coerceIn(6f, 60f)
+                                                val travel = if (horizontalPan) centerDx else centerDy
+                                                scrollOffset += travel * sign
+                                                if (horizontalPan) {
+                                                    pendingNotchesX.set(
+                                                        pendingNotchesX.get() + travel * sign / pxPerNotch
+                                                    )
+                                                } else {
+                                                    pendingNotches.set(
+                                                        pendingNotches.get() + travel * sign / pxPerNotch
+                                                    )
+                                                }
+                                            }
+                                            pinchLastDist = dist
                                         }
+                                        pinchLastCenter = center
                                         event.changes.forEach { it.consume() }
                                     } else {
-                                        lastZoomDist = null
+                                        pinchLastDist = null
+                                        pinchLastCenter = null
+                                        // Lifting one finger ends the zoom; keeping it open would
+                                        // leave the far end holding a gesture nobody is driving.
+                                        if (pinchActive) {
+                                            pinchActive = false
+                                            sendPinchEnd()
+                                        }
+                                        twoFingerMode = TWO_FINGER_UNDECIDED
+                                        pinchArm = 0f
+                                        panArm = 0f
+                                        panSumX = 0f
+                                        panSumY = 0f
+                                        horizontalPan = false
                                     }
                                     val change = event.changes.firstOrNull { it.id == dragPointerId && it.pressed }
                                         ?: event.changes.firstOrNull { it.pressed }
@@ -355,6 +453,7 @@ fun TouchpadScreen(
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false)
                                 pendingNotches.set(0f)
+                                pendingNotchesX.set(0f)
                                 var scrollPointerId = down.id
                                 while (true) {
                                     val event = awaitPointerEvent()
