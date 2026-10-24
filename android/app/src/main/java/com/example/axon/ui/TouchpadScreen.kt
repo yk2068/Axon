@@ -160,29 +160,42 @@ fun TouchpadScreen(
     // leaky integrator: each tick hands over a fixed share of what is owed, which
     // spreads a fast flick over the following frames while keeping the total distance
     // exactly equal to the finger travel.
-    LaunchedEffect(Unit) {
+    // The ticker is woken by a finger movement and parks itself once the backlog is
+    // drained: a tick that ran forever kept the CPU busy at 100 Hz for as long as the
+    // touchpad was open, even with nobody touching the screen.
+    val scrollTicker = remember {
+        Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    }
+    LaunchedEffect(scrollTicker) {
         while (true) {
-            kotlinx.coroutines.delay(SCROLL_TICK_MS)
-            val owedY = pendingNotches.get()
-            val owedX = pendingNotchesX.get()
-            if (owedY == 0f && owedX == 0f) continue
-            var outY = 0f
-            var outX = 0f
-            if (abs(owedY) < SCROLL_MIN_NOTCH) {
-                pendingNotches.set(0f)
-                outY = owedY
-            } else {
-                outY = owedY * SCROLL_RELEASE
-                pendingNotches.set(owedY - outY)
+            scrollTicker.receive()
+            while (true) {
+                kotlinx.coroutines.delay(SCROLL_TICK_MS)
+                val owedY = pendingNotches.get()
+                val owedX = pendingNotchesX.get()
+                var outY = 0f
+                var outX = 0f
+                if (owedY != 0f) {
+                    if (abs(owedY) < SCROLL_MIN_NOTCH) {
+                        pendingNotches.set(0f)
+                        outY = owedY
+                    } else {
+                        outY = owedY * SCROLL_RELEASE
+                        pendingNotches.set(owedY - outY)
+                    }
+                }
+                if (owedX != 0f) {
+                    if (abs(owedX) < SCROLL_MIN_NOTCH) {
+                        pendingNotchesX.set(0f)
+                        outX = owedX
+                    } else {
+                        outX = owedX * SCROLL_RELEASE
+                        pendingNotchesX.set(owedX - outX)
+                    }
+                }
+                if (outY != 0f || outX != 0f) sendScroll(outY.toDouble(), outX.toDouble())
+                if (pendingNotches.get() == 0f && pendingNotchesX.get() == 0f) break
             }
-            if (abs(owedX) < SCROLL_MIN_NOTCH) {
-                pendingNotchesX.set(0f)
-                outX = owedX
-            } else {
-                outX = owedX * SCROLL_RELEASE
-                pendingNotchesX.set(owedX - outX)
-            }
-            if (outY != 0f || outX != 0f) sendScroll(outY.toDouble(), outX.toDouble())
         }
     }
     val dragChannel = remember {
@@ -359,6 +372,7 @@ fun TouchpadScreen(
                                                         pendingNotches.get() + travel * sign / pxPerNotch
                                                     )
                                                 }
+                                                scrollTicker.trySend(Unit)
                                             }
                                             pinchLastDist = dist
                                         }
@@ -473,6 +487,7 @@ fun TouchpadScreen(
                                             .coerceIn(6f, 60f)
                                         val prev = pendingNotches.get()
                                         pendingNotches.set(prev + dragAmount.y * sign / pxPerNotch)
+                                        scrollTicker.trySend(Unit)
                                     }
                                 }
                             }

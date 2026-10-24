@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.axon"
         minSdk = 24
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.6.16-touchpad"
+        versionCode = 12
+        versionName = "1.6.17-power"
 
         // The only native code left is two small CameraX helpers, so ship 64- and 32-bit ARM
         // and drop the x86 emulator slices.

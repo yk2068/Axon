@@ -2,6 +2,7 @@ package com.example.axon
 
 import android.content.Context
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -161,6 +162,15 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
         super.onStop()
         foreground = false
         handler.removeCallbacks(retryTick)
+        // Everything here exists to serve input coming from the screen: the wake lock, the
+        // Wi-Fi lock and a socket that answers a ping twice a second. Kept alive in the
+        // background they stop the phone from ever sleeping, so the session is torn down
+        // and onStart opens a fresh one when the touchpad is visible again.
+        releaseKeepAlive()
+        if (!manualDisconnect) {
+            connected = false
+            webSocketClient?.disconnect()
+        }
     }
 
     private fun toWebSocketUrl(url: String): String = try {
@@ -224,8 +234,15 @@ class MainActivity : ComponentActivity(), WebSocketClient.WebSocketConnectionLis
         try {
             if (wifiLock == null) {
                 val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                // Low latency keeps the radio responsive for input without pinning it to
+                // full power the way HIGH_PERF does; it only applies on API 29 and up.
                 @Suppress("DEPRECATION")
-                wifiLock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "axon:wifi")
+                val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                } else {
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF
+                }
+                wifiLock = wifi.createWifiLock(mode, "axon:wifi")
                     .apply { setReferenceCounted(false) }
             }
             if (wifiLock?.isHeld != true) wifiLock?.acquire()
