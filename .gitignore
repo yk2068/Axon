@@ -37,3 +37,6 @@ build/
 *.orig
 *.rej
 server/axon-server
+
+# Build artifacts
+dist/

@@ -11,8 +11,14 @@ android {
         applicationId = "com.example.axon"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.6.12-touchpad"
+        versionCode = 11
+        versionName = "1.6.16-touchpad"
+
+        // The only native code left is two small CameraX helpers, so ship 64- and 32-bit ARM
+        // and drop the x86 emulator slices.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
@@ -26,7 +32,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // The app is a single screen with one dependency chain; R8 removes the large
+            // unused fraction of Compose/OkHttp and shrinking drops unused resources.
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("local")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -84,27 +93,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.espresso.core)
 
-    implementation(libs.androidx.navigation3.ui)
-    implementation(libs.androidx.navigation3.runtime)
-    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
-
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.google.mlkit:barcode-scanning:17.2.0")
+    implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.camera:camera-camera2:1.3.3")
     implementation("androidx.camera:camera-lifecycle:1.3.3")
     implementation("androidx.camera:camera-view:1.3.3")
-    implementation("com.github.mwiede:jsch:0.2.17")
-}
-
-configurations.all {
-    resolutionStrategy {
-        force("io.netty:netty-handler:4.1.135.Final")
-        force("io.netty:netty-codec-http2:4.1.135.Final")
-        force("io.netty:netty-handler-proxy:4.1.135.Final")
-        force("org.bouncycastle:bcpkix-jdk18on:1.84")
-        force("org.bouncycastle:bcprov-jdk18on:1.84")
-        force("com.google.protobuf:protobuf-java:3.25.5")
-        force("org.apache.commons:commons-lang3:3.18.0")
-        force("org.apache.httpcomponents:httpclient:4.5.13")
-    }
 }

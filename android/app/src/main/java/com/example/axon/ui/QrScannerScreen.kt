@@ -54,10 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.axon.R
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
+import com.example.axon.scan.QrDecoder
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 private val BlueAccent   = Color(0xFF3B82F6)
@@ -91,11 +88,7 @@ fun QrScannerScreen(
                 factory = { ctx ->
                     val previewView = PreviewView(ctx)
                     val executor = Executors.newSingleThreadExecutor()
-                    val scanner = BarcodeScanning.getClient(
-                        BarcodeScannerOptions.Builder()
-                            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                            .build()
-                    )
+                    val decoder = QrDecoder()
                     val preview = Preview.Builder().build()
                     preview.setSurfaceProvider(previewView.surfaceProvider)
                     val analysis = ImageAnalysis.Builder()
@@ -107,7 +100,7 @@ fun QrScannerScreen(
                             imageProxy.close()
                             return@setAnalyzer
                         }
-                        processImageProxy(imageProxy, scanner) { rawValue ->
+                        processImageProxy(imageProxy, decoder) { rawValue ->
                             if (detected.compareAndSet(false, true)) {
                                 onQrDetected(rawValue)
                             }
@@ -194,24 +187,21 @@ fun QrScannerScreen(
 @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
 private fun processImageProxy(
     imageProxy: ImageProxy,
-    scanner: com.google.mlkit.vision.barcode.BarcodeScanner,
+    decoder: QrDecoder,
     onDetected: (String) -> Unit
 ) {
-    val mediaImage = imageProxy.image
-    if (mediaImage != null) {
-        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-        scanner.process(image)
-            .addOnSuccessListener { barcodes ->
-                for (barcode in barcodes) {
-                    val rawValue = barcode.rawValue
-                    if (rawValue != null) {
-                        onDetected(rawValue)
-                        break
-                    }
-                }
-            }
-            .addOnCompleteListener { imageProxy.close() }
-    } else {
+    try {
+        // The Y plane is already 8-bit greyscale; copy it out (rows can be padded) and decode.
+        val plane = imageProxy.planes[0]
+        val rowStride = plane.rowStride
+        val buffer = plane.buffer
+        val data = ByteArray(rowStride * imageProxy.height)
+        buffer.rewind()
+        buffer.get(data, 0, minOf(buffer.remaining(), data.size))
+        decoder.decode(data, rowStride, imageProxy.width, imageProxy.height)?.let(onDetected)
+    } catch (e: Exception) {
+        e.printStackTrace()
+    } finally {
         imageProxy.close()
     }
 }
