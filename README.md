@@ -1,14 +1,5 @@
 > [!IMPORTANT]
-> **本仓库是 [Kaia-Alenia/Axon](https://github.com/Kaia-Alenia/Axon) 的 Fork，并非官方仓库。**
->
-> - 上游项目：[Kaia-Alenia/Axon](https://github.com/Kaia-Alenia/Axon)
-> - 本 Fork 所有者：[yk2068](https://github.com/yk2068)
-> - 许可：沿用上游的 **GPL-3.0**（见 [LICENSE](LICENSE)）
->
-> **本 Fork 为 AI 辅助定制版本**：改动由 AI 辅助生成与维护，非上游作者官方发布。
-> 定制内容不代表上游立场，问题与 bug 请优先在本仓库反馈；如需跟随上游进展，可关注上游仓库。
-
-Axon 把手机变成电脑的无线触控板。本 Fork 只做一件事：让它像一块真正的触控板那样安静、顺手——界面只剩触控区，设置靠手势唤出，输入链路上的延迟与丢包逐项清掉。
+> **本仓库是 [Kaia-Alenia/Axon](https://github.com/Kaia-Alenia/Axon) 的 Fork**
 
 ## 定制改动点
 
@@ -35,36 +26,3 @@ Axon 把手机变成电脑的无线触控板。本 Fork 只做一件事：让它
 - **修正 `getLocalIP()`**：网卡名前缀改为大小写不敏感（Windows 报 `WLAN`），并跳过链路本地地址。
 - **终端静音**：去掉每 500ms 一条的 RTT 延迟、连接/断开、键盘三类日志，启动横幅与错误信息保留。
 - **捏合走真实触摸注入**：用 `CreateSyntheticPointerDevice(PT_TOUCH)` + `InjectSyntheticPointerInput` 在光标处落下两根合成手指，应用收到的是 `WM_POINTER` 触摸手势而非鼠标滚轮，因此缩放由应用自己连续完成。触控板不做手势时完全不受影响；设备创建失败则整块手势静默禁用。检测可用 `axon -pinch-test`（在光标位置做一次放大再还原）。
-
-## 安装
-
-### 服务端（电脑）
-
-取得 `axon.exe` 后放到固定目录，以固定参数启动：
-
-```powershell
-axon -host <本机局域网IP> -token <自定义token>
-```
-
-可选 `-no-logo` 去掉启动大图，`-port` / `-udp-port` 指定端口。
-
-### 客户端（手机）
-
-安装 `app-release.apk`，首次扫码连接，之后启动即自动重连。
-
-## 构建
-
-**Android**
-
-```bash
-cd android
-./gradlew :app:assembleRelease
-# 产物：app/build/outputs/apk/release/app-release.apk
-```
-
-**服务端**
-
-```bash
-cd server
-GOPROXY=https://goproxy.cn,direct go build -o axon.exe .
-```
